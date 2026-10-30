@@ -67,8 +67,23 @@
             </div>
             <p class="auth-field-error" id="registerError" role="alert"></p>
             <button class="auth-submit" type="submit">Continue <span aria-hidden="true">→</span></button>
-            <p class="auth-terms">Your password is securely hashed. Admins can see account details and recorded feature actions (such as sign-ins, contact or profile changes, messages sent, and call outcomes), but not private message contents, chat viewing, or call audio/video. Moderators can review messages only after they are reported.</p>
+            <p class="auth-terms">We’ll email you a one-time code to verify your address. Your password is securely hashed. Admins can see account details and recorded feature actions (such as sign-ins, contact or profile changes, messages sent, and call outcomes), but not private message contents, chat viewing, or call audio/video. Moderators can review messages only after they are reported.</p>
             <p class="auth-switch">Already have an account? <button type="button" id="showLoginButton">Log in</button></p>
+          </form>
+
+          <form id="verificationForm" hidden>
+            <button class="auth-back" id="backToRegistrationButton" type="button">← Back to your details</button>
+            <span class="auth-eyebrow">CHECK YOUR INBOX</span>
+            <h1>Verify your email</h1>
+            <p class="auth-description">We sent a six-digit code to the email address below. Enter it to finish creating your Chatter account.</p>
+            <p class="verification-number" id="verificationEmail"></p>
+            <label class="auth-label" for="verificationCode">Verification code</label>
+            <input class="auth-input code-input" id="verificationCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" aria-describedby="verificationNotice verificationError" required />
+            <p class="auth-field-error" id="verificationError" role="alert"></p>
+            <p class="verification-notice" id="verificationNotice" role="status" aria-live="polite"></p>
+            <button class="auth-submit" id="verifyEmailButton" type="submit">Verify and create account <span aria-hidden="true">→</span></button>
+            <button class="auth-resend" id="resendVerificationButton" type="button">Send a new code</button>
+            <p class="auth-terms">The code expires in 10 minutes. Never share a sign-in code with anyone.</p>
           </form>
 
           <form id="loginForm" hidden>
@@ -401,6 +416,6 @@
       </section>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20261030-call-history"></script>
+    <script src="app.js?v=20261030-email-verification"></script>
   </body>
 </html>

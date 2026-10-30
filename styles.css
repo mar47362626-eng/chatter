@@ -131,8 +131,12 @@ button { color: inherit; }
 .auth-footer { margin: 17px 0 0; color: #98a49c; font-size: 10px; }
 .auth-back { margin: 0 0 25px; padding: 0; border: 0; background: transparent; color: #718078; cursor: pointer; font-size: 10px; font-weight: 600; }
 .auth-back:hover { color: var(--green-dark); }
-.verification-number { margin: -13px 0 23px; color: #708078; font-size: 10px; }
-.code-input { font-size: 18px; font-weight: 700; letter-spacing: 8px; text-align: center; }
+.verification-number { margin: -13px 0 23px; color: #31483b; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.code-input { font-size: 20px; font-weight: 700; letter-spacing: 10px; text-align: center; }
+.verification-notice { min-height: 15px; margin: 2px 0 8px; color: var(--green-dark); text-align: center; font-size: 10px; line-height: 1.5; }
+.auth-resend { display: block; margin: 12px auto 0; padding: 5px 8px; border: 0; background: transparent; color: var(--green-dark); cursor: pointer; font-size: 10px; font-weight: 700; }
+.auth-resend:hover { text-decoration: underline; }
+.auth-resend:disabled { cursor: wait; opacity: .6; }
 .demo-code-note { margin: 13px 0 5px; color: #89968e; font-size: 9px; }
 .demo-code { display: inline-block; margin: 0 0 9px; padding: 7px 12px; border: 1px dashed #b9daca; border-radius: 8px; background: #f1f8f3; color: var(--green-dark); font-size: 14px; font-weight: 700; letter-spacing: 3px; }
 

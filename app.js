@@ -142,7 +142,9 @@ const emojiPopover = document.querySelector("#emojiPopover");
 const toast = document.querySelector("#toast");
 const authScreen = document.querySelector("#authScreen");
 const registerForm = document.querySelector("#registerForm");
+const verificationForm = document.querySelector("#verificationForm");
 const loginForm = document.querySelector("#loginForm");
+let pendingRegistration = null;
 const sidebar = document.querySelector("#sidebar");
 const newChatView = document.querySelector("#newChatView");
 const newChatSearchInput = document.querySelector("#newChatSearchInput");
@@ -1160,7 +1162,9 @@ async function signOut() {
   appShell.hidden = true;
   authScreen.hidden = false;
   registerForm.hidden = false;
+  verificationForm.hidden = true;
   loginForm.hidden = true;
+  pendingRegistration = null;
   registerForm.reset();
   document.querySelector("#registerError").textContent = "";
   document.querySelector("#loginError").textContent = "";
@@ -1412,6 +1416,34 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
   showToast("Your account details have been updated.");
 });
 
+async function requestRegistrationCode(payload) {
+  const error = document.querySelector("#registerError");
+  const submitButton = registerForm.querySelector('button[type="submit"]');
+  error.textContent = "";
+  submitButton.disabled = true;
+  submitButton.textContent = "Sending code…";
+  try {
+    await apiRequest("/api/register/send-code", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    pendingRegistration = payload;
+    document.querySelector("#verificationEmail").textContent = payload.email;
+    document.querySelector("#verificationCode").value = "";
+    document.querySelector("#verificationError").textContent = "";
+    document.querySelector("#verificationNotice").textContent = "Your code is on its way. It can take a minute to arrive.";
+    registerForm.hidden = true;
+    loginForm.hidden = true;
+    verificationForm.hidden = false;
+    document.querySelector("#verificationCode").focus();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    submitButton.disabled = false;
+    submitButton.innerHTML = 'Continue <span aria-hidden="true">→</span>';
+  }
+}
+
 registerForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = document.querySelector("#registerName").value.trim();
@@ -1429,23 +1461,43 @@ registerForm.addEventListener("submit", async (event) => {
     return;
   }
   const password = document.querySelector("#registerPassword").value;
+  await requestRegistrationCode({ name, email, password, phone: `${countryCode}${phoneDigits}` });
+});
+
+verificationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.querySelector("#verificationError");
+  const verifyButton = document.querySelector("#verifyEmailButton");
+  error.textContent = "";
+  verifyButton.disabled = true;
+  verifyButton.textContent = "Verifying…";
   try {
-    const result = await apiRequest("/api/register", {
+    const result = await apiRequest("/api/register/verify-code", {
       method: "POST",
-      body: JSON.stringify({ name, email, password, phone: `${countryCode}${phoneDigits}` })
+      body: JSON.stringify({
+        email: pendingRegistration?.email || document.querySelector("#verificationEmail").textContent,
+        code: document.querySelector("#verificationCode").value.trim()
+      })
     });
     profile = result.user;
     chats = result.chats;
     activeId = chats[0]?.id || null;
+    pendingRegistration = null;
+    verificationForm.hidden = true;
     openChatApp();
     subscribeToChatUpdates();
+    if (!result.welcomeEmailSent) showToast("Your account is ready, but the welcome email could not be sent.");
   } catch (requestError) {
     error.textContent = requestError.message;
+  } finally {
+    verifyButton.disabled = false;
+    verifyButton.innerHTML = 'Verify and create account <span aria-hidden="true">→</span>';
   }
 });
 
 document.querySelector("#showLoginButton").addEventListener("click", () => {
   registerForm.hidden = true;
+  verificationForm.hidden = true;
   loginForm.hidden = false;
   document.querySelector("#loginError").textContent = "";
   document.querySelector("#loginEmail").focus();
@@ -1453,9 +1505,47 @@ document.querySelector("#showLoginButton").addEventListener("click", () => {
 
 document.querySelector("#showRegisterButton").addEventListener("click", () => {
   loginForm.hidden = true;
+  verificationForm.hidden = true;
   registerForm.hidden = false;
   document.querySelector("#registerError").textContent = "";
   document.querySelector("#registerName").focus();
+});
+
+document.querySelector("#backToRegistrationButton").addEventListener("click", () => {
+  verificationForm.hidden = true;
+  registerForm.hidden = false;
+  pendingRegistration = null;
+  document.querySelector("#registerError").textContent = "";
+  document.querySelector("#registerName").focus();
+});
+
+document.querySelector("#resendVerificationButton").addEventListener("click", async () => {
+  if (!pendingRegistration) return;
+  const button = document.querySelector("#resendVerificationButton");
+  const error = document.querySelector("#verificationError");
+  const notice = document.querySelector("#verificationNotice");
+  error.textContent = "";
+  notice.textContent = "";
+  button.disabled = true;
+  button.textContent = "Sending…";
+  try {
+    await apiRequest("/api/register/send-code", {
+      method: "POST",
+      body: JSON.stringify(pendingRegistration)
+    });
+    notice.textContent = "A new code was sent. Check your inbox.";
+    document.querySelector("#verificationCode").value = "";
+    document.querySelector("#verificationCode").focus();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Send a new code";
+  }
+});
+
+document.querySelector("#verificationCode").addEventListener("input", (event) => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
 });
 
 loginForm.addEventListener("submit", async (event) => {

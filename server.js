@@ -1,4 +1,4 @@
-const { createHash, randomBytes, scrypt: scryptCallback, timingSafeEqual } = require("node:crypto");
+const { createHash, createHmac, randomBytes, randomInt, scrypt: scryptCallback, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
 const { createServer } = require("node:http");
 const { existsSync, mkdirSync, readFileSync, statSync } = require("node:fs");
@@ -22,6 +22,17 @@ database.exec(`
     password_hash TEXT NOT NULL,
     password_salt TEXT NOT NULL,
     created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS pending_registrations (
+    email TEXT PRIMARY KEY COLLATE NOCASE,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    verification_hash TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER NOT NULL,
+    last_sent_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS chats (
     id TEXT PRIMARY KEY,
@@ -110,10 +121,14 @@ database.exec(`
 `);
 
 database.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+database.prepare("DELETE FROM pending_registrations WHERE expires_at < ?").run(Date.now());
 const sessions = new Map();
 const eventStreams = new Map();
 const calls = new Map();
 const sessionLifetime = 7 * 24 * 60 * 60 * 1000;
+const verificationCodeLifetime = 10 * 60 * 1000;
+const verificationResendDelay = 60 * 1000;
+const maxVerificationAttempts = 5;
 const callRingLifetime = 60 * 1000;
 const callLifetime = 4 * 60 * 60 * 1000;
 const maxRequestBytes = 1024 * 1024;
@@ -189,6 +204,126 @@ function normalizePhone(value) {
 
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email, phone: user.phone };
+}
+
+function escapeEmailHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  })[character]);
+}
+
+function verificationCodeHash(email, code) {
+  return createHmac("sha256", process.env.BREVO_API_KEY).update(`chatter-email-verification:${email}:${code}`).digest("hex");
+}
+
+function verificationEmail(name, code) {
+  const safeName = escapeEmailHtml(name);
+  const html = `
+    <!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="margin:0;padding:32px 12px;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#203128">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;border-collapse:collapse">
+          <tr><td style="padding:0 0 18px;text-align:center;font-size:23px;font-weight:700;letter-spacing:-1px;color:#203128">chatter<span style="color:#1c9a70">.</span></td></tr>
+          <tr><td style="padding:34px 32px 30px;border-radius:18px;background:#fff;border:1px solid #e5ece7">
+            <p style="margin:0 0 10px;color:#1c9a70;font-size:11px;font-weight:700;letter-spacing:1.5px">ONE QUICK CHECK</p>
+            <h1 style="margin:0 0 12px;font-size:25px;line-height:1.25;color:#203128">Verify your email</h1>
+            <p style="margin:0;color:#6d7d73;font-size:15px;line-height:1.7">Hi ${safeName}, enter this code in Chatter to finish creating your account.</p>
+            <div style="margin:26px 0;padding:19px 12px;border:1px solid #dcece3;border-radius:12px;background:#f4faf6;text-align:center">
+              <span style="color:#177d5c;font-size:32px;font-weight:700;letter-spacing:10px">${code}</span>
+            </div>
+            <p style="margin:0;color:#6d7d73;font-size:13px;line-height:1.7">This code expires in <strong>10 minutes</strong>. If you did not request it, you can safely ignore this email.</p>
+          </td></tr>
+          <tr><td style="padding:18px 12px 0;color:#94a198;text-align:center;font-size:11px;line-height:1.6">A little closer, wherever you are.<br>© Chatter</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+  return {
+    subject: "Your Chatter verification code",
+    html,
+    text: `Hi ${name},\n\nUse this code to finish creating your Chatter account: ${code}\n\nIt expires in 10 minutes. If you did not request it, ignore this email.\n\nA little closer, wherever you are.\nChatter`
+  };
+}
+
+function getPublicUrl() {
+  const configuredUrl = process.env.CHATTER_PUBLIC_URL;
+  if (!configuredUrl) return "";
+  let url;
+  try {
+    url = new URL(configuredUrl);
+  } catch {
+    throw new Error("CHATTER_PUBLIC_URL must be a valid HTTPS URL.");
+  }
+  if (url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
+    throw new Error("CHATTER_PUBLIC_URL must use HTTPS.");
+  }
+  return url.toString();
+}
+
+function welcomeEmail(name) {
+  const safeName = escapeEmailHtml(name);
+  const publicUrl = getPublicUrl();
+  const button = publicUrl
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:26px 0 8px"><tr><td style="border-radius:9px;background:#1c9a70"><a href="${escapeEmailHtml(publicUrl)}" style="display:inline-block;padding:13px 22px;color:#fff;text-decoration:none;font-size:14px;font-weight:700">Open Chatter</a></td></tr></table>`
+    : "";
+  const html = `
+    <!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="margin:0;padding:32px 12px;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#203128">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;border-collapse:collapse">
+          <tr><td style="padding:0 0 18px;text-align:center;font-size:23px;font-weight:700;letter-spacing:-1px;color:#203128">chatter<span style="color:#1c9a70">.</span></td></tr>
+          <tr><td style="padding:34px 32px 30px;border-radius:18px;background:#fff;border:1px solid #e5ece7">
+            <p style="margin:0 0 10px;color:#1c9a70;font-size:11px;font-weight:700;letter-spacing:1.5px">YOU’RE IN</p>
+            <h1 style="margin:0 0 12px;font-size:25px;line-height:1.25;color:#203128">Welcome to Chatter, ${safeName}!</h1>
+            <p style="margin:0;color:#6d7d73;font-size:15px;line-height:1.7">Your email is verified and your account is ready. Find your people, start a conversation, and stay close wherever you are.</p>
+            ${button}
+            <p style="margin:24px 0 0;color:#6d7d73;font-size:13px;line-height:1.7">We’re glad you’re here.<br><strong style="color:#203128">The Chatter team</strong></p>
+          </td></tr>
+          <tr><td style="padding:18px 12px 0;color:#94a198;text-align:center;font-size:11px;line-height:1.6">A little closer, wherever you are.<br>© Chatter</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+  return {
+    subject: "Welcome to Chatter!",
+    html,
+    text: `Welcome to Chatter, ${name}!\n\nYour email is verified and your account is ready. Find your people, start a conversation, and stay close wherever you are.\n\n${publicUrl ? `Open Chatter: ${publicUrl}\n\n` : ""}We’re glad you’re here.\nThe Chatter team`
+  };
+}
+
+async function sendBrevoEmail({ email, name, subject, html, text }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
+  if (!apiKey || !senderEmail) {
+    throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
+  }
+  const senderName = process.env.BREVO_SENDER_NAME || "Chatter";
+  let response;
+  try {
+    response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "accept": "application/json", "api-key": apiKey, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ name, email }],
+        subject,
+        htmlContent: html,
+        textContent: text
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch {
+    throw new HttpError(502, "Could not reach Brevo to send email. Please try again shortly.");
+  }
+  if (!response.ok) {
+    throw new HttpError(502, "Brevo could not send the email. Check that the API key and verified sender address are correct.");
+  }
 }
 
 function recordUserActivity(userId, action, details = {}) {
@@ -422,7 +557,8 @@ function publishPresenceUpdates(userId) {
 async function handleApi(request, response, url) {
   const route = `${request.method} ${url.pathname}`;
 
-  if (route === "POST /api/register") {
+  if (route === "POST /api/register/send-code") {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
     const input = await readJson(request);
     const name = cleanText(input.name, "Name", 40);
     const email = cleanText(input.email, "Email", 254).toLowerCase();
@@ -433,13 +569,92 @@ async function handleApi(request, response, url) {
     if (password.length < 8 || password.length > 128) throw new HttpError(400, "Password must be 8 to 128 characters.");
     if (database.prepare("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE").get(email)) throw new HttpError(409, "An account with that email already exists. Log in instead.");
     if (database.prepare("SELECT 1 FROM users WHERE phone = ?").get(phone)) throw new HttpError(409, "An account with that phone number already exists.");
-    const id = randomBytes(16).toString("hex");
+    const now = Date.now();
+    database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE AND expires_at <= ?").run(email, now);
+    const pending = database.prepare("SELECT last_sent_at, expires_at FROM pending_registrations WHERE email = ? COLLATE NOCASE").get(email);
+    if (pending && now - pending.last_sent_at < verificationResendDelay) {
+      const seconds = Math.ceil((verificationResendDelay - (now - pending.last_sent_at)) / 1000);
+      throw new HttpError(429, `Please wait ${seconds} seconds before requesting another code.`);
+    }
     const salt = randomBytes(16).toString("hex");
     const passwordHash = await scrypt(password, salt, 64);
-    database.prepare("INSERT INTO users (id, name, email, phone, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, name, email, phone, passwordHash.toString("hex"), salt, new Date().toISOString());
-    recordUserActivity(id, "account.created");
+    const code = String(randomInt(0, 1000000)).padStart(6, "0");
+    const codeHash = verificationCodeHash(email, code);
+    const emailContent = verificationEmail(name, code);
+    database.prepare(`
+      INSERT INTO pending_registrations (email, name, phone, password_hash, password_salt, verification_hash, attempts, expires_at, last_sent_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET
+        name = excluded.name, phone = excluded.phone, password_hash = excluded.password_hash,
+        password_salt = excluded.password_salt, verification_hash = excluded.verification_hash,
+        attempts = 0, expires_at = excluded.expires_at, last_sent_at = excluded.last_sent_at
+    `).run(email, name, phone, passwordHash.toString("hex"), salt, codeHash, now + verificationCodeLifetime, now);
+    try {
+      await sendBrevoEmail({ email, name, ...emailContent });
+    } catch (error) {
+      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE AND verification_hash = ?").run(email, codeHash);
+      throw error;
+    }
+    return respond(response, 200, { sent: true, email });
+  }
+
+  if (route === "POST /api/register/verify-code") {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
+      throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
+    }
+    const input = await readJson(request);
+    const email = cleanText(input.email, "Email", 254).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
+    const pending = database.prepare("SELECT * FROM pending_registrations WHERE email = ? COLLATE NOCASE").get(email);
+    if (!pending) throw new HttpError(400, "No active verification request was found. Return to registration and request a new code.");
+    const now = Date.now();
+    if (pending.expires_at <= now) {
+      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
+      throw new HttpError(400, "That code has expired. Return to registration and request a new one.");
+    }
+    const code = typeof input.code === "string" ? input.code.trim() : "";
+    const isCodeFormatValid = /^\d{6}$/.test(code);
+    const submittedHash = Buffer.from(verificationCodeHash(email, isCodeFormatValid ? code : "invalid"), "hex");
+    const expectedHash = Buffer.from(pending.verification_hash, "hex");
+    const isCodeCorrect = isCodeFormatValid && timingSafeEqual(submittedHash, expectedHash);
+    if (!isCodeCorrect) {
+      const attempts = pending.attempts + 1;
+      if (attempts >= maxVerificationAttempts) {
+        database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
+        throw new HttpError(429, "Too many incorrect codes. Return to registration and request a new one.");
+      }
+      database.prepare("UPDATE pending_registrations SET attempts = ? WHERE email = ? COLLATE NOCASE").run(attempts, email);
+      throw new HttpError(400, `That code is not correct. ${maxVerificationAttempts - attempts} attempts remaining.`);
+    }
+
+    const id = randomBytes(16).toString("hex");
+    const createdAt = new Date(now).toISOString();
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      database.prepare("INSERT INTO users (id, name, email, phone, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+        id, pending.name, email, pending.phone, pending.password_hash, pending.password_salt, createdAt
+      );
+      recordUserActivity(id, "account.created");
+      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
     setSession(response, id);
-    return respond(response, 201, { user: publicUser({ id, name, email, phone }), chats: [] });
+    let welcomeEmailSent = true;
+    try {
+      const welcome = welcomeEmail(pending.name);
+      await sendBrevoEmail({ email, name: pending.name, ...welcome });
+    } catch (error) {
+      welcomeEmailSent = false;
+      console.error("Welcome email delivery failed:", error.message);
+    }
+    return respond(response, 201, {
+      user: publicUser({ id, name: pending.name, email, phone: pending.phone }),
+      chats: [],
+      welcomeEmailSent
+    });
   }
 
   if (route === "POST /api/login") {

@@ -16,6 +16,22 @@ Chatter is a chat application served by Node.js. The server uses SQLite for acco
 
 The SQLite database is created at `data/chatter.sqlite` the first time the server starts. Keep the `data` directory to preserve accounts, messages, and sign-in sessions. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
 
+## Brevo email verification
+
+New accounts must verify their email before they are created. Chatter sends a six-digit verification code through Brevo, expires codes after 10 minutes, limits each code to five attempts, and waits 60 seconds before sending another code to the same address. After successful verification, Chatter creates the account and sends a branded welcome email. A welcome-email delivery problem does not prevent sign-in after the account has been created.
+
+In Brevo, create a v3 API key and verify the sender email address (or authenticate its domain). Configure these server environment variables before starting Chatter:
+
+```powershell
+$env:BREVO_API_KEY = "your-brevo-api-v3-key"
+$env:BREVO_SENDER_EMAIL = "hello@your-verified-domain.com"
+$env:BREVO_SENDER_NAME = "Chatter"
+$env:CHATTER_PUBLIC_URL = "https://your-service.onrender.com"
+npm.cmd start
+```
+
+`BREVO_SENDER_NAME` and `CHATTER_PUBLIC_URL` are optional; the sender name defaults to `Chatter`, and the welcome email includes an app button only when a public URL is configured. Keep the API key in server environment settings, never in browser code or GitHub. Registration is unavailable until `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` are configured.
+
 ## Audio and video calls
 
 Users can start audio or video calls from a one-to-one conversation. The other person must be signed in with Chatter open to receive and answer the call. Allow microphone and camera access when the browser asks. Calls use WebRTC to send media between the two browsers; screen sharing is available during video calls.
@@ -44,7 +60,7 @@ npm.cmd start
 
 Open `http://localhost:3000/moderation.html` and sign in with that password. Keep the password private and do not commit it to source control. If it is not configured, moderator sign-in stays disabled.
 
-This local setup does not send email or SMS verification codes or upload file contents. It is not configured for public internet hosting. Before deploying publicly, add HTTPS, rate limiting, email/phone verification, backups, and a production hosting setup.
+This local setup does not send SMS verification codes or upload file contents. It is not configured for public internet hosting. Before deploying publicly, add rate limiting, backups, and a production hosting setup.
 
 ## Render deployment
 
@@ -57,6 +73,8 @@ Configure these Render environment variables:
 - `CHATTER_DATA_DIR=/var/data`
 - `CHATTER_MODERATOR_PASSWORD` set through Render's secret environment-variable settings to a unique password of at least 20 characters
 - `CHATTER_ICE_SERVERS` with your production STUN/TURN configuration; TURN is needed for reliable calls across restrictive networks
+- `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for verified registration and welcome emails
+- `CHATTER_PUBLIC_URL` set to the HTTPS URL Render assigns to the deployed service, for the welcome-email button
 
 Attach a persistent Render disk mounted at `/var/data`. SQLite stores accounts, messages, reports, call history, and sessions there; without persistent storage those records can be lost when the service restarts or redeploys. Persistent disks and plan availability can affect hosting cost, so choose the Render plan and storage size before creating the service. Never add production secrets or database files to GitHub.
 
