@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f7f6" />
+    <meta
+      name="description"
+      content="A friendly place to catch up with the people who matter."
+    />
+    <title>Chatter — stay close</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section class="auth-screen" id="authScreen" aria-label="Chatter account access">
+      <div class="auth-brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <path d="M7.2 23.8 6 28l5.2-1.6a13 13 0 1 0-4-2.6Z" fill="currentColor" />
+            <path d="M11 13.2h10M11 18h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span>chatter<span class="brand-dot">.</span></span>
+      </div>
+      <div class="auth-card">
+        <div class="auth-illustration" aria-hidden="true">
+          <div class="auth-orbit orbit-one"></div>
+          <div class="auth-orbit orbit-two"></div>
+          <div class="auth-bubble bubble-one">Hey there! 👋</div>
+          <div class="auth-bubble bubble-two">Good to see you ✨</div>
+          <div class="auth-chat-mark">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M7.2 23.8 6 28l5.2-1.6a13 13 0 1 0-4-2.6Z" fill="currentColor" />
+              <path d="M11 13.2h10M11 18h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+            </svg>
+          </div>
+          <span class="auth-illustration-caption">Good conversations start here.</span>
+        </div>
+        <div class="auth-content">
+          <form id="registerForm">
+            <span class="auth-eyebrow">YOUR PEOPLE, ONE TAP AWAY</span>
+            <h1>Create your account</h1>
+            <p class="auth-description">Register with your phone number and email to get started on Chatter.</p>
+            <label class="auth-label" for="registerName">Your name</label>
+            <input class="auth-input" id="registerName" name="name" type="text" placeholder="How should people know you?" autocomplete="name" maxlength="40" required />
+            <label class="auth-label" for="registerEmail">Email address</label>
+            <input class="auth-input" id="registerEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" maxlength="254" required />
+            <label class="auth-label" for="registerPassword">Password</label>
+            <input class="auth-input" id="registerPassword" name="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" maxlength="128" required />
+            <label class="auth-label" for="registerPhone">Phone number</label>
+            <div class="phone-input">
+              <select id="countryCode" name="countryCode" aria-label="Country calling code">
+                <option value="+234" selected>🇳🇬 +234</option>
+                <option value="+1">🇺🇸 +1</option>
+                <option value="+44">🇬🇧 +44</option>
+                <option value="+233">🇬🇭 +233</option>
+                <option value="+91">🇮🇳 +91</option>
+              </select>
+              <input id="registerPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="801 234 5678" minlength="7" maxlength="20" required />
+            </div>
+            <p class="auth-field-error" id="registerError" role="alert"></p>
+            <button class="auth-submit" type="submit">Continue <span aria-hidden="true">→</span></button>
+            <p class="auth-terms">Your password is securely hashed. Admins can see account details and recorded feature actions (such as sign-ins, contact or profile changes, messages sent, and call outcomes), but not private message contents, chat viewing, or call audio/video. Moderators can review messages only after they are reported.</p>
+            <p class="auth-switch">Already have an account? <button type="button" id="showLoginButton">Log in</button></p>
+          </form>
+
+          <form id="loginForm" hidden>
+            <span class="auth-eyebrow">WELCOME BACK</span>
+            <h1>Log in to Chatter</h1>
+            <p class="auth-description">Use the email and password from your account.</p>
+            <label class="auth-label" for="loginEmail">Email address</label>
+            <input class="auth-input" id="loginEmail" type="email" autocomplete="email" maxlength="254" required />
+            <label class="auth-label" for="loginPassword">Password</label>
+            <input class="auth-input" id="loginPassword" type="password" autocomplete="current-password" maxlength="128" required />
+            <p class="auth-terms">Chatter records account and feature-use metadata for administration, including messages sent and call participants/outcomes. It does not record private message contents or chat viewing, and admins cannot access call audio/video.</p>
+            <p class="auth-field-error" id="loginError" role="alert"></p>
+            <button class="auth-submit" type="submit">Log in <span aria-hidden="true">→</span></button>
+            <p class="auth-switch">New to Chatter? <button type="button" id="showRegisterButton">Create an account</button></p>
+          </form>
+        </div>
+      </div>
+      <p class="auth-footer">A little closer, wherever you are.</p>
+    </section>
+
+    <main class="app-shell" id="appShell" hidden>
+      <aside class="sidebar" id="sidebar" aria-label="Conversations">
+        <section class="new-chat-view" id="newChatView" aria-label="New chat" hidden>
+          <header class="new-chat-header">
+            <button class="icon-button" id="newChatBackButton" aria-label="Back to conversations" title="Back">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg>
+            </button>
+            <h1>New chat</h1>
+            <button class="icon-button" id="inviteButton" aria-label="Invite contacts" title="Invite contacts">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" /></svg>
+            </button>
+          </header>
+          <div class="new-chat-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4 4" /></svg>
+            <input id="newChatSearchInput" type="search" placeholder="Search name, number or @username" autocomplete="off" aria-label="Search contacts by name, number or username" />
+          </div>
+          <div class="new-chat-scroll">
+            <div class="new-chat-actions">
+              <button class="new-chat-action" id="newGroupButton" type="button">
+                <span class="new-chat-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6" /></svg></span>
+                <span>New group</span>
+              </button>
+              <button class="new-chat-action" id="newContactButton" type="button">
+                <span class="new-chat-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM19 8v6M22 11h-6" /></svg></span>
+                <span>New contact</span>
+              </button>
+              <button class="new-chat-action" id="newCommunityButton" type="button">
+                <span class="new-chat-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM17 11a3 3 0 1 0-2.4-4.8M17 15h1a4 4 0 0 1 4 4v2" /></svg></span>
+                <span>New community</span>
+              </button>
+            </div>
+            <button class="new-chat-contact self-contact" id="selfChatButton" type="button">
+              <span class="new-chat-avatar avatar-you" id="selfContactAvatar">A</span>
+              <span class="new-chat-contact-copy"><strong id="selfContactName">Your name (You)</strong><span>Message yourself</span></span>
+            </button>
+            <div class="contacts-heading"><span>CONTACTS ON CHATTER</span><span id="newChatContactCount"></span></div>
+            <div class="new-chat-contact-list" id="newChatContactList"></div>
+            <div class="new-chat-empty" id="newChatEmpty" hidden>No matching contacts. Add a new contact to start a chat.</div>
+          </div>
+        </section>
+
+        <div class="sidebar-top">
+          <a class="brand" href="#" aria-label="Chatter home">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 32 32" fill="none">
+                <path d="M7.2 23.8 6 28l5.2-1.6a13 13 0 1 0-4-2.6Z" fill="currentColor" />
+                <path d="M11 13.2h10M11 18h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span>chatter<span class="brand-dot">.</span></span>
+          </a>
+          <div class="sidebar-actions">
+            <button class="icon-button" id="newChatButton" aria-label="Start a new chat" title="New chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <button class="icon-button" id="moreButton" aria-label="More options" title="More options" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>
+            </button>
+            <div class="options-menu" id="optionsMenu" role="menu" hidden>
+              <button type="button" role="menuitem" id="settingsButton">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z" /></svg>
+                Settings
+              </button>
+              <button type="button" role="menuitem" class="menu-signout" id="menuSignOutButton">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" /></svg>
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4 4" /></svg>
+          <input id="searchInput" type="search" placeholder="Search or start a new chat" autocomplete="off" aria-label="Search conversations" />
+          <kbd>⌘ K</kbd>
+        </div>
+
+        <div class="filter-row" role="tablist" aria-label="Conversation filters">
+          <button class="filter-chip is-active" role="tab" aria-selected="true" data-filter="all">All <span id="allCount">6</span></button>
+          <button class="filter-chip" role="tab" aria-selected="false" data-filter="unread">Unread <span id="unreadCount">2</span></button>
+          <button class="filter-chip" role="tab" aria-selected="false" data-filter="groups">Groups</button>
+        </div>
+
+        <div class="section-label"><span>MESSAGES</span><button id="sortButton" class="sort-button" aria-label="Sort conversations">Recent <span>⌄</span></button></div>
+        <div class="conversation-list" id="conversationList" role="list"></div>
+        <div class="sidebar-bottom">
+          <div class="profile-avatar avatar-you" id="profileAvatar">A</div>
+          <div class="profile-copy"><strong id="profileName">Alex Morgan</strong><span id="profileContact">Email and phone account</span></div>
+          <button class="icon-button profile-menu" id="profileButton" aria-label="Account settings" title="Account settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>
+          </button>
+        </div>
+      </aside>
+
+      <section class="chat-panel" id="chatPanel" aria-label="Chat">
+        <header class="chat-header">
+          <button class="icon-button mobile-back" id="backButton" aria-label="Back to conversations">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+          </button>
+          <div class="header-person" id="headerPerson"></div>
+          <div class="header-actions">
+            <button class="header-action" id="callButton" aria-label="Call options" title="Audio or video call" aria-haspopup="dialog">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.8 10 7.5 8.3 9.2a14 14 0 0 0 6.5 6.5l1.7-1.7 3.7 2.8-.8 3a1.5 1.5 0 0 1-1.7 1.1A18.8 18.8 0 0 1 3.1 6.3a1.5 1.5 0 0 1 1.1-1.7l3-.8Z" /></svg>
+              <span>Call</span>
+            </button>
+            <button class="icon-button header-search" id="chatSearchButton" aria-label="Search in chat" title="Search in chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4 4" /></svg>
+            </button>
+            <button class="icon-button" id="chatMoreButton" aria-label="Chat options" title="Chat options" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></svg>
+            </button>
+            <div class="chat-options-menu" id="chatOptionsMenu" role="menu" hidden>
+              <button type="button" role="menuitem" id="viewContactButton">Contact info</button>
+              <button type="button" role="menuitem" id="editContactButton">Edit contact</button>
+              <button type="button" role="menuitem" id="clearChatButton">Clear chat</button>
+            </div>
+          </div>
+        </header>
+
+        <form class="message-search-bar" id="messageSearchBar" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4 4" /></svg>
+          <input id="messageSearchInput" type="search" placeholder="Search in this conversation" aria-label="Search messages in this conversation" />
+          <span class="search-match-count" id="searchMatchCount"></span>
+          <button type="button" class="search-nav-button" id="previousMatchButton" aria-label="Previous match">↑</button>
+          <button type="button" class="search-nav-button" id="nextMatchButton" aria-label="Next match">↓</button>
+          <button type="button" class="search-nav-button close-search-button" id="closeMessageSearchButton" aria-label="Close message search">×</button>
+        </form>
+
+        <div class="message-area" id="messageArea">
+          <div class="chat-intro" id="chatIntro"></div>
+          <div class="messages" id="messages" aria-live="polite"></div>
+        </div>
+
+        <form class="composer" id="messageForm">
+          <div class="composer-tools">
+            <button type="button" class="icon-button composer-icon" id="attachButton" aria-label="Attach a file" title="Attach a file">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 12.5 6.6-6.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a5.2 5.2 0 0 1-7.4-7.4l8.4-8.4" /></svg>
+            </button>
+            <button type="button" class="icon-button composer-icon" id="emojiButton" aria-label="Choose an emoji" title="Add an emoji">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8.5 14.2s1.2 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01" /></svg>
+            </button>
+          </div>
+          <input id="messageInput" type="text" placeholder="Write a message..." autocomplete="off" aria-label="Write a message" />
+          <button class="send-button" type="submit" aria-label="Send message">
+            <span>Send</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.2 18-3.6-7.2L3 10.2 21 3Z" /><path d="M10.2 13.8 15 9" /></svg>
+          </button>
+          <div class="emoji-popover" id="emojiPopover" hidden>
+            <button type="button" aria-label="Add smiling face">😊</button><button type="button" aria-label="Add heart">💛</button><button type="button" aria-label="Add laughing face">😂</button><button type="button" aria-label="Add thumbs up">👍</button><button type="button" aria-label="Add party popper">🎉</button><button type="button" aria-label="Add sparkle">✨</button>
+          </div>
+        </form>
+        <input type="file" id="fileInput" hidden />
+      </section>
+    </main>
+    <div class="dialog-backdrop" id="contactDialog" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="contactDialogTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">YOUR PEOPLE</span>
+        <h2 id="contactDialogTitle">Add a contact</h2>
+        <p class="dialog-description">Save a name and phone number to start a conversation.</p>
+        <form id="contactForm">
+          <label class="auth-label" for="contactName">Name</label>
+          <input class="auth-input" id="contactName" type="text" autocomplete="name" maxlength="40" placeholder="Contact name" required />
+          <label class="auth-label" for="contactPhone">Phone number</label>
+          <div class="phone-input">
+            <select id="contactCountryCode" aria-label="Contact country calling code">
+              <option value="+234" selected>🇳🇬 +234</option>
+              <option value="+1">🇺🇸 +1</option>
+              <option value="+44">🇬🇧 +44</option>
+              <option value="+233">🇬🇭 +233</option>
+              <option value="+91">🇮🇳 +91</option>
+            </select>
+            <input id="contactPhone" type="tel" inputmode="numeric" autocomplete="tel-national" minlength="7" maxlength="20" placeholder="801 234 5678" required />
+          </div>
+          <p class="auth-field-error" id="contactError" role="alert"></p>
+          <button class="auth-submit" type="submit">Save contact <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+    </div>
+    <div class="dialog-backdrop" id="settingsDialog" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">YOUR ACCOUNT</span>
+        <h2 id="settingsDialogTitle">Settings</h2>
+        <p class="dialog-description">Update the details on your Chatter account.</p>
+        <form id="settingsForm">
+          <label class="auth-label" for="settingsName">Name</label>
+          <input class="auth-input" id="settingsName" type="text" autocomplete="name" maxlength="40" required />
+          <label class="auth-label" for="settingsEmail">Email address</label>
+          <input class="auth-input" id="settingsEmail" type="email" autocomplete="email" maxlength="254" required />
+          <label class="auth-label" for="settingsPhone">Phone number</label>
+          <input class="auth-input" id="settingsPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" required />
+          <p class="auth-field-error" id="settingsError" role="alert"></p>
+          <button class="auth-submit" type="submit">Save changes <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+    </div>
+    <div class="dialog-backdrop" id="groupDialog" hidden>
+      <section class="dialog-card group-dialog-card" role="dialog" aria-modal="true" aria-labelledby="groupDialogTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow" id="groupDialogEyebrow">GET TOGETHER</span>
+        <h2 id="groupDialogTitle">Create a group</h2>
+        <p class="dialog-description" id="groupDialogDescription">Name your group and choose contacts to add.</p>
+        <form id="groupForm">
+          <label class="auth-label" for="groupName">Name</label>
+          <input class="auth-input" id="groupName" type="text" maxlength="50" placeholder="Give it a name" required />
+          <div id="communityDescriptionField" hidden>
+            <label class="auth-label" for="communityDescription">Description <span class="optional-label">optional</span></label>
+            <textarea class="auth-input community-description-input" id="communityDescription" maxlength="180" placeholder="What is this community about?"></textarea>
+          </div>
+          <div class="group-members-header"><span class="auth-label">Add contacts</span><span id="selectedMemberCount">0 selected</span></div>
+          <div class="group-member-list" id="groupMemberList"></div>
+          <p class="auth-field-error" id="groupError" role="alert"></p>
+          <button class="auth-submit" id="createGroupSubmit" type="submit">Create group <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+    </div>
+    <div class="dialog-backdrop" id="chatContactDialog" hidden>
+      <section class="dialog-card chat-contact-card" role="dialog" aria-modal="true" aria-labelledby="chatContactTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">CONTACT DETAILS</span>
+        <div class="contact-details-heading">
+          <span class="new-chat-avatar" id="chatContactAvatar"></span>
+          <div><h2 id="chatContactTitle"></h2><p id="chatContactPhone"></p></div>
+        </div>
+        <p class="dialog-description" id="chatContactDescription"></p>
+        <button class="auth-submit secondary-action-button" type="button" id="editContactFromDetails">Edit contact <span aria-hidden="true">→</span></button>
+      </section>
+    </div>
+    <div class="dialog-backdrop" id="editChatContactDialog" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="editChatContactTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">CONTACT DETAILS</span>
+        <h2 id="editChatContactTitle">Edit contact</h2>
+        <p class="dialog-description">Update the name shown for this contact.</p>
+        <form id="editChatContactForm">
+          <label class="auth-label" for="editChatContactName">Name</label>
+          <input class="auth-input" id="editChatContactName" type="text" maxlength="40" required />
+          <label class="auth-label" for="editChatContactPhone">Phone number</label>
+          <input class="auth-input" id="editChatContactPhone" type="tel" inputmode="tel" maxlength="24" readonly aria-label="Contact phone number (read only)" />
+          <p class="auth-field-error" id="editChatContactError" role="alert"></p>
+          <button class="auth-submit" type="submit">Save contact <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+    </div>
+    <div class="dialog-backdrop call-choice-backdrop" id="callChoiceDialog" hidden>
+      <section class="dialog-card call-choice-card" role="dialog" aria-modal="true" aria-labelledby="callChoiceTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">STAY CONNECTED</span>
+        <h2 id="callChoiceTitle">Call <span id="callContactName"></span></h2>
+        <p class="dialog-description">Start a call with this person. They need Chatter open to answer.</p>
+        <div class="call-choice-actions">
+          <button class="call-choice-button" type="button" id="startAudioCallButton">
+            <span class="call-choice-icon audio-call-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.8 10 7.5 8.3 9.2a14 14 0 0 0 6.5 6.5l1.7-1.7 3.7 2.8-.8 3a1.5 1.5 0 0 1-1.7 1.1A18.8 18.8 0 0 1 3.1 6.3a1.5 1.5 0 0 1 1.1-1.7l3-.8Z" /></svg></span>
+            <span><strong>Audio call</strong><small>Microphone only</small></span>
+          </button>
+          <button class="call-choice-button" type="button" id="startVideoCallButton">
+            <span class="call-choice-icon video-call-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10 5-3v10l-5-3" /></svg></span>
+            <span><strong>Video call</strong><small>Camera, microphone &amp; screen share</small></span>
+          </button>
+        </div>
+        <p class="auth-field-error call-error" id="callChoiceError" role="alert"></p>
+      </section>
+    </div>
+    <div class="dialog-backdrop call-choice-backdrop" id="incomingCallDialog" hidden>
+      <section class="dialog-card call-choice-card" role="dialog" aria-modal="true" aria-labelledby="incomingCallTitle">
+        <span class="dialog-eyebrow">INCOMING CALL</span>
+        <h2 id="incomingCallTitle"></h2>
+        <p class="dialog-description" id="incomingCallDescription"></p>
+        <p class="auth-field-error call-error" id="incomingCallError" role="alert"></p>
+        <div class="call-choice-actions">
+          <button class="auth-submit" type="button" id="acceptCallButton">Answer</button>
+          <button class="call-control-button end-call-button" type="button" id="declineCallButton">Decline</button>
+        </div>
+      </section>
+    </div>
+    <div class="dialog-backdrop" id="reportMessageDialog" hidden>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="reportMessageTitle">
+        <button class="dialog-close" type="button" data-close-dialog aria-label="Close">×</button>
+        <span class="dialog-eyebrow">MESSAGE SAFETY</span>
+        <h2 id="reportMessageTitle">Report this message?</h2>
+        <p class="dialog-description">A moderator can review the reported message and your reason. They cannot browse the rest of your private conversation from this report.</p>
+        <form id="reportMessageForm">
+          <label class="auth-label" for="reportReason">Why are you reporting it?</label>
+          <textarea class="auth-input community-description-input" id="reportReason" maxlength="300" minlength="4" required placeholder="Please describe the issue"></textarea>
+          <p class="auth-field-error" id="reportMessageError" role="alert"></p>
+          <button class="auth-submit" type="submit">Submit report <span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+    </div>
+    <div class="dialog-backdrop call-session-backdrop" id="callSessionDialog" hidden>
+      <section class="call-session-card" role="dialog" aria-modal="true" aria-labelledby="callSessionTitle">
+        <div class="call-session-topline">
+          <div><span class="dialog-eyebrow">CHATTER CALL</span><h2 id="callSessionTitle"></h2><p id="callSessionStatus">Connecting…</p></div>
+          <span class="call-duration" id="callDuration">00:00</span>
+        </div>
+        <div class="call-preview-stage" id="callPreviewStage">
+          <video id="remoteCallVideo" autoplay playsinline muted hidden></video>
+          <video id="callPreviewVideo" autoplay playsinline muted hidden></video>
+          <audio id="remoteCallAudio" autoplay></audio>
+          <div class="audio-call-avatar" id="audioCallAvatar"></div>
+          <div class="call-preview-caption" id="callPreviewCaption">Waiting for the other person to answer…</div>
+        </div>
+        <div class="call-controls">
+          <button type="button" class="call-control-button" id="toggleMicrophoneButton"><span>Mute mic</span></button>
+          <button type="button" class="call-control-button" id="toggleCameraButton" hidden><span>Turn camera off</span></button>
+          <button type="button" class="call-control-button screen-share-button" id="shareScreenButton" hidden><span>Share screen</span></button>
+          <button type="button" class="call-control-button end-call-button" id="endCallButton"><span>End call</span></button>
+        </div>
+      </section>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js?v=20261030-call-history"></script>
+  </body>
+</html>

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f7f6" />
+    <title>Chatter Admin</title>
+    <link rel="stylesheet" href="moderation.css" />
+  </head>
+  <body>
+    <header class="moderation-header">
+      <span class="brand">chatter<span>.</span></span>
+      <span class="header-label">Private administration</span>
+    </header>
+    <section id="loginPanel" class="panel login-panel">
+      <p class="eyebrow">RESTRICTED ACCESS</p>
+      <h1>Admin sign in</h1>
+      <p class="description">Manage account and usage metadata, call history, system status, and reported messages. Private chat content and call media are never shown here.</p>
+      <form id="moderatorLoginForm">
+        <label for="moderatorPassword">Admin password</label>
+        <input id="moderatorPassword" type="password" autocomplete="current-password" required />
+        <p id="loginError" class="error" role="alert"></p>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+    <div id="dashboard" class="admin-layout" hidden>
+      <aside class="admin-sidebar" aria-label="Admin navigation">
+        <div class="sidebar-heading"><span class="sidebar-logo">chatter<span>.</span></span><small>ADMIN CONSOLE</small></div>
+        <nav class="admin-nav">
+          <button type="button" class="nav-item is-active" data-admin-view="overview">
+            <span class="nav-icon">⌂</span><span>Overview</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="users">
+            <span class="nav-icon">♙</span><span>Users</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="activity">
+            <span class="nav-icon">◷</span><span>User activity</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="calls">
+            <span class="nav-icon">☎</span><span>Call history</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="reports">
+            <span class="nav-icon">▣</span><span>Reported messages</span><span class="nav-count" id="openReportCount">0</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="audit">
+            <span class="nav-icon">▤</span><span>Moderation audit</span>
+          </button>
+          <button type="button" class="nav-item" data-admin-view="system">
+            <span class="nav-icon">⚙</span><span>System status</span>
+          </button>
+        </nav>
+        <div class="sidebar-note">Usage logs contain action types and times only. Private message text and call audio/video are not available to admins.</div>
+        <button class="sidebar-logout" id="moderatorLogoutButton" type="button">Sign out</button>
+      </aside>
+      <main class="admin-main">
+        <section id="overviewView" class="admin-view">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ADMIN OVERVIEW</p>
+              <h1>Chatter at a glance</h1>
+              <p class="description">Account, usage, call, and report totals. Private conversation content is excluded.</p>
+            </div>
+            <button class="secondary-button" id="refreshOverviewButton" type="button">Refresh</button>
+          </div>
+          <p id="overviewError" class="error" role="alert"></p>
+          <div class="stat-grid" id="overviewStats"></div>
+          <section class="panel">
+            <h2>Recently registered</h2>
+            <div id="recentUsersList" class="table-wrap"></div>
+          </section>
+        </section>
+        <section id="usersView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ACCOUNT DIRECTORY</p>
+              <h1>Users</h1>
+              <p class="description">Account details and last recorded activity. Passwords and private conversations are not shown.</p>
+            </div>
+            <button class="secondary-button" id="refreshUsersButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <form id="userSearchForm" class="toolbar">
+              <div class="search-field">
+                <label for="userSearch">Search accounts</label>
+                <input id="userSearch" type="search" autocomplete="off" placeholder="Name, email or phone" />
+              </div>
+              <button type="submit">Search</button>
+            </form>
+            <p id="usersError" class="error" role="alert"></p>
+            <div id="usersList" class="table-wrap"></div>
+          </section>
+        </section>
+        <section id="activityView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">USAGE METADATA ONLY</p>
+              <h1>User activity</h1>
+              <p class="description">Review recorded account and feature actions by user, newest first. Message text, chat viewing, attachment contents, and call media are not tracked. Activity is available from when logging was enabled; older actions are not backfilled.</p>
+            </div>
+            <button class="secondary-button" id="refreshActivityButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <form id="activitySearchForm" class="toolbar">
+              <div class="search-field">
+                <label for="activityUserSearch">Filter by user</label>
+                <input id="activityUserSearch" type="search" autocomplete="off" placeholder="Name, email or phone" />
+              </div>
+              <button type="submit">Search</button>
+              <button class="secondary-button" id="clearActivitySearchButton" type="button">Show all</button>
+            </form>
+            <p id="activityError" class="error" role="alert"></p>
+            <div id="activityList" class="table-wrap"></div>
+            <div id="activityPagination" class="activity-pagination"></div>
+          </section>
+        </section>
+        <section id="callsView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CALL METADATA ONLY</p>
+              <h1>Call history</h1>
+              <p class="description">Participants, call type, time, duration, and outcome. No audio or video is recorded or accessible.</p>
+            </div>
+            <button class="secondary-button" id="refreshCallsButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <p id="callsError" class="error" role="alert"></p>
+            <div id="callsList" class="table-wrap"></div>
+          </section>
+        </section>
+        <section id="reportsView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">USER-REPORTED CONTENT ONLY</p>
+              <h1>Reported messages</h1>
+              <p class="description">Find a report by either participant’s phone number. Only reported messages appear.</p>
+            </div>
+            <button class="secondary-button" id="refreshReportsButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <form id="reportSearchForm" class="toolbar">
+              <div class="search-field">
+                <label for="reportPhoneSearch">Phone number</label>
+                <input id="reportPhoneSearch" type="search" inputmode="tel" autocomplete="off" placeholder="Search a participant’s number" />
+              </div>
+              <div class="status-field">
+                <label for="reportStatus">Report status</label>
+                <select id="reportStatus">
+                  <option value="open">Open reports</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="dismissed">Dismissed</option>
+                  <option value="all">All reports</option>
+                </select>
+              </div>
+              <button type="submit">Search</button>
+            </form>
+            <p class="privacy-hint">Phone search checks only people attached to reports; it does not open a user’s chat history.</p>
+            <p id="dashboardError" class="error" role="alert"></p>
+            <div id="reportList" class="report-list" aria-live="polite"></div>
+          </section>
+        </section>
+        <section id="auditView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">ACCOUNTABILITY</p>
+              <h1>Moderation audit log</h1>
+              <p class="description">Admin sign-ins, report views, and moderation status changes are recorded here.</p>
+            </div>
+          </div>
+          <section class="panel audit-panel">
+            <h2>Recent activity</h2>
+            <div id="auditList" class="audit-list"></div>
+          </section>
+        </section>
+        <section id="systemView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">SERVICE HEALTH</p>
+              <h1>System status</h1>
+              <p class="description">Basic local server, database, and active-session health information.</p>
+            </div>
+            <button class="secondary-button" id="refreshSystemButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <p id="systemError" class="error" role="alert"></p>
+            <div id="systemDetails" class="system-grid"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="moderation.js?v=20261030-admin-console"></script>
+  </body>
+</html>
