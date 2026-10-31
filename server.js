@@ -1,127 +1,72 @@
 const { createHash, createHmac, randomBytes, randomInt, scrypt: scryptCallback, timingSafeEqual } = require("node:crypto");
 const { promisify } = require("node:util");
 const { createServer } = require("node:http");
-const { existsSync, mkdirSync, readFileSync, statSync } = require("node:fs");
-const { extname, join, normalize, resolve } = require("node:path");
-const { DatabaseSync } = require("node:sqlite");
+const { existsSync, readFileSync, statSync } = require("node:fs");
+const { extname, join, normalize } = require("node:path");
+const { Pool } = require("pg");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
-const dataDirectory = resolve(process.env.CHATTER_DATA_DIR || join(root, "data"));
-mkdirSync(dataDirectory, { recursive: true });
-const databasePath = join(dataDirectory, "chatter.sqlite");
-const database = new DatabaseSync(databasePath);
+const databaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("Set SUPABASE_DB_URL to your Supabase PostgreSQL connection string.");
+const pool = new Pool({ connectionString: databaseUrl, max: 5, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 });
+function postgresSql(sql) {
+  let parameterIndex = 0;
+  return sql
+    .replace(/\?/g, () => `$${++parameterIndex}`)
+    .replace(/\$(\d+) IS NULL/g, "($$$1::text) IS NULL")
+    .replace(/ COLLATE NOCASE/g, "")
+    .replace(/\bAS\s+([a-z][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*)/g, 'AS "$1"')
+    .replace(/\bLIKE\b/g, "ILIKE");
+}
+const database = {
+  prepare(sql) {
+    const text = postgresSql(sql);
+    return {
+      async get(...values) {
+        const result = await pool.query(text, values);
+        return result.rows[0];
+      },
+      async all(...values) {
+        const result = await pool.query(text, values);
+        return result.rows;
+      },
+      async run(...values) {
+        const result = await pool.query(text, values);
+        return { changes: result.rowCount };
+      }
+    };
+  },
+  async transaction(callback) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const transactionDatabase = {
+        prepare(sql) {
+          const text = postgresSql(sql);
+          return {
+            async run(...values) {
+              const result = await client.query(text, values);
+              return { changes: result.rowCount };
+            }
+          };
+        }
+      };
+      const result = await callback(transactionDatabase);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+  async close() {
+    await pool.end();
+  }
+};
 const secureCookieAttribute = process.env.NODE_ENV === "production" ? "; Secure" : "";
-database.exec(`
-  PRAGMA foreign_keys = ON;
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    phone TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    password_salt TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS pending_registrations (
-    email TEXT PRIMARY KEY COLLATE NOCASE,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    password_salt TEXT NOT NULL,
-    verification_hash TEXT NOT NULL,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    expires_at INTEGER NOT NULL,
-    last_sent_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS chats (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL CHECK (type IN ('direct', 'group', 'community', 'self')),
-    name TEXT,
-    description TEXT NOT NULL DEFAULT '',
-    created_by TEXT NOT NULL REFERENCES users(id),
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS chat_members (
-    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    display_name TEXT,
-    PRIMARY KEY (chat_id, user_id)
-  );
-  CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    sender_id TEXT NOT NULL REFERENCES users(id),
-    text TEXT NOT NULL,
-    attachment_name TEXT,
-    attachment_size TEXT,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS call_history (
-    id TEXT PRIMARY KEY,
-    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    caller_id TEXT NOT NULL REFERENCES users(id),
-    callee_id TEXT NOT NULL REFERENCES users(id),
-    type TEXT NOT NULL CHECK (type IN ('audio', 'video')),
-    status TEXT NOT NULL CHECK (status IN ('ringing', 'active', 'completed', 'missed', 'declined', 'cancelled')),
-    created_at TEXT NOT NULL,
-    accepted_at TEXT,
-    ended_at TEXT,
-    duration_seconds INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS contacts (
-    owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    contact_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    display_name TEXT NOT NULL,
-    PRIMARY KEY (owner_id, contact_id),
-    CHECK (owner_id != contact_id)
-  );
-  CREATE TABLE IF NOT EXISTS message_reports (
-    id TEXT PRIMARY KEY,
-    chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    reporter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
-    created_at TEXT NOT NULL,
-    UNIQUE (message_id, reporter_id)
-  );
-  CREATE TABLE IF NOT EXISTS moderation_audit (
-    id TEXT PRIMARY KEY,
-    report_id TEXT NOT NULL,
-    actor_id TEXT NOT NULL,
-    action TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS user_activity (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    action TEXT NOT NULL,
-    details TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS admin_access_log (
-    id TEXT PRIMARY KEY,
-    action TEXT NOT NULL,
-    report_id TEXT,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id TEXT,
-    role TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS messages_chat_created ON messages(chat_id, created_at);
-  CREATE INDEX IF NOT EXISTS call_history_chat_created ON call_history(chat_id, created_at);
-  CREATE INDEX IF NOT EXISTS user_activity_created ON user_activity(created_at);
-  CREATE INDEX IF NOT EXISTS user_activity_user_created ON user_activity(user_id, created_at);
-  CREATE INDEX IF NOT EXISTS chat_members_user ON chat_members(user_id, chat_id);
-  CREATE INDEX IF NOT EXISTS message_reports_status_created ON message_reports(status, created_at);
-`);
-
-database.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
-database.prepare("DELETE FROM pending_registrations WHERE expires_at < ?").run(Date.now());
 const sessions = new Map();
 const eventStreams = new Map();
 const calls = new Map();
@@ -326,8 +271,8 @@ async function sendBrevoEmail({ email, name, subject, html, text }) {
   }
 }
 
-function recordUserActivity(userId, action, details = {}) {
-  database.prepare("INSERT INTO user_activity (id, user_id, action, details, created_at) VALUES (?, ?, ?, ?, ?)").run(
+async function recordUserActivity(userId, action, details = {}, target = database) {
+  await target.prepare("INSERT INTO user_activity (id, user_id, action, details, created_at) VALUES (?, ?, ?, ?, ?)").run(
     randomBytes(16).toString("hex"),
     userId,
     action,
@@ -336,8 +281,8 @@ function recordUserActivity(userId, action, details = {}) {
   );
 }
 
-function recordAdminAccess(action, reportId = null) {
-  database.prepare("INSERT INTO admin_access_log (id, action, report_id, created_at) VALUES (?, ?, ?, ?)").run(
+async function recordAdminAccess(action, reportId = null) {
+  await database.prepare("INSERT INTO admin_access_log (id, action, report_id, created_at) VALUES (?, ?, ?, ?)").run(
     randomBytes(16).toString("hex"),
     action,
     reportId,
@@ -349,12 +294,12 @@ function hashSessionToken(token) {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function findSession(request, response) {
+async function findSession(request, response) {
   const token = parseCookies(request.headers.cookie).chatter_session;
   const tokenHash = token && hashSessionToken(token);
   let session = token && sessions.get(token);
   if (token && !session) {
-    const savedSession = database.prepare("SELECT user_id, role, expires_at FROM sessions WHERE token_hash = ?").get(tokenHash);
+    const savedSession = await database.prepare("SELECT user_id, role, expires_at FROM sessions WHERE token_hash = ?").get(tokenHash);
     if (savedSession) {
       session = { userId: savedSession.user_id, role: savedSession.role, expiresAt: savedSession.expires_at };
       sessions.set(token, session);
@@ -363,48 +308,50 @@ function findSession(request, response) {
   if (!session || session.expiresAt < Date.now()) {
     if (token) {
       sessions.delete(token);
-      database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
+      await database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
     }
     if (response) response.setHeader("Set-Cookie", `chatter_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secureCookieAttribute}`);
     return null;
   }
   session.expiresAt = Date.now() + sessionLifetime;
-  database.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").run(session.expiresAt, tokenHash);
+  await database.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").run(session.expiresAt, tokenHash);
   if (response) response.setHeader("Set-Cookie", `chatter_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${sessionLifetime / 1000}${secureCookieAttribute}`);
   return { token, userId: session.userId, role: session.role || "user" };
 }
 
-function requireSession(request, response) {
-  const session = findSession(request, response);
+async function requireSession(request, response) {
+  const session = await findSession(request, response);
   if (!session || session.role !== "user") throw new HttpError(401, "Please log in to continue.");
   return session;
 }
 
-function requireModerator(request, response) {
-  const session = findSession(request, response);
+async function requireModerator(request, response) {
+  const session = await findSession(request, response);
   if (!session || session.role !== "moderator") throw new HttpError(401, "Moderator sign-in is required.");
   return session;
 }
 
-function setSession(response, userId, role = "user") {
+async function setSession(response, userId, role = "user") {
   const token = randomBytes(32).toString("base64url");
   const expiresAt = Date.now() + sessionLifetime;
   sessions.set(token, { userId, role, expiresAt });
-  database.prepare("INSERT INTO sessions (token_hash, user_id, role, expires_at) VALUES (?, ?, ?, ?)").run(hashSessionToken(token), userId, role, expiresAt);
+  await database.prepare("INSERT INTO sessions (token_hash, user_id, role, expires_at) VALUES (?, ?, ?, ?)").run(hashSessionToken(token), userId, role, expiresAt);
   response.setHeader("Set-Cookie", `chatter_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${sessionLifetime / 1000}${secureCookieAttribute}`);
 }
 
-function clearSession(request, response) {
+async function clearSession(request, response) {
   const token = parseCookies(request.headers.cookie).chatter_session;
   if (token) {
     const userId = sessions.get(token)?.userId;
     const wasOnline = userId ? isUserOnline(userId) : false;
     sessions.delete(token);
-    database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashSessionToken(token));
+    await database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashSessionToken(token));
     const streams = eventStreams.get(token);
     streams?.forEach((stream) => stream.end());
     eventStreams.delete(token);
-    if (userId && wasOnline && !isUserOnline(userId)) publishPresenceUpdates(userId);
+    if (userId && wasOnline && !isUserOnline(userId)) {
+      publishPresenceUpdates(userId).catch((error) => console.error("Could not update online status:", error));
+    }
   }
   response.setHeader("Set-Cookie", `chatter_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secureCookieAttribute}`);
 }
@@ -416,21 +363,21 @@ function isUserOnline(userId) {
   return false;
 }
 
-function chatSummary(chatId, viewerId) {
-  const chat = database.prepare("SELECT * FROM chats WHERE id = ?").get(chatId);
+async function chatSummary(chatId, viewerId) {
+  const chat = await database.prepare("SELECT * FROM chats WHERE id = ?").get(chatId);
   if (!chat) return null;
-  const memberships = database.prepare(`
+  const memberships = await database.prepare(`
     SELECT cm.user_id AS id, cm.display_name, u.name, u.phone
     FROM chat_members cm JOIN users u ON u.id = cm.user_id
     WHERE cm.chat_id = ?
   `).all(chatId);
   const self = memberships.find((member) => member.id === viewerId);
   if (!self) return null;
-  const messageRows = database.prepare(`
+  const messageRows = (await database.prepare(`
     SELECT m.*, u.name AS sender_name FROM messages m
     JOIN users u ON u.id = m.sender_id
     WHERE m.chat_id = ?
-  `).all(chatId).map((item) => ({
+  `).all(chatId)).map((item) => ({
     id: item.id,
     from: item.sender_id === viewerId ? "you" : "them",
     ...(chat.type === "group" || chat.type === "community" ? { sender: item.sender_name } : {}),
@@ -439,9 +386,9 @@ function chatSummary(chatId, viewerId) {
     time: new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     ...(item.attachment_name ? { attachment: { name: item.attachment_name, size: item.attachment_size } } : {})
   }));
-  const callRows = database.prepare(`
+  const callRows = (await database.prepare(`
     SELECT * FROM call_history WHERE chat_id = ?
-  `).all(chatId).map((item) => ({
+  `).all(chatId)).map((item) => ({
     id: item.id,
     from: item.caller_id === viewerId ? "you" : "them",
     createdAt: item.created_at,
@@ -458,8 +405,11 @@ function chatSummary(chatId, viewerId) {
   const members = memberships.filter((member) => member.id !== viewerId);
   const isSelf = chat.type === "self";
   const other = isSelf ? self : members[0];
+  const contact = chat.type === "direct"
+    ? await database.prepare("SELECT display_name FROM contacts WHERE owner_id = ? AND contact_id = ?").get(viewerId, other.id)
+    : null;
   const displayName = chat.type === "direct"
-    ? database.prepare("SELECT display_name FROM contacts WHERE owner_id = ? AND contact_id = ?").get(viewerId, other.id)?.display_name || other.name
+    ? contact?.display_name || other.name
     : isSelf ? `${self.name} (You)` : chat.name;
   const initials = displayName.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
   const latestItemPreview = latestItem?.call
@@ -491,16 +441,30 @@ function chatSummary(chatId, viewerId) {
   };
 }
 
-function getUserChats(userId) {
-  return database.prepare(`
+async function getUserChats(userId) {
+  const userChats = await database.prepare(`
     SELECT c.id FROM chats c JOIN chat_members cm ON cm.chat_id = c.id
+    LEFT JOIN (
+      SELECT chat_id, MAX(created_at) AS latest_message_at
+      FROM messages
+      GROUP BY chat_id
+    ) message_activity ON message_activity.chat_id = c.id
+    LEFT JOIN (
+      SELECT chat_id, MAX(created_at) AS latest_call_at
+      FROM call_history
+      GROUP BY chat_id
+    ) call_activity ON call_activity.chat_id = c.id
     WHERE cm.user_id = ?
-    ORDER BY MAX(
-      c.created_at,
-      COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.created_at),
-      COALESCE((SELECT MAX(created_at) FROM call_history WHERE chat_id = c.id), c.created_at)
-    ) DESC
-  `).all(userId).map(({ id }) => chatSummary(id, userId));
+    ORDER BY CASE
+      WHEN c.created_at >= COALESCE(message_activity.latest_message_at, c.created_at)
+        AND c.created_at >= COALESCE(call_activity.latest_call_at, c.created_at)
+        THEN c.created_at
+      WHEN COALESCE(message_activity.latest_message_at, c.created_at) >= COALESCE(call_activity.latest_call_at, c.created_at)
+        THEN message_activity.latest_message_at
+      ELSE COALESCE(call_activity.latest_call_at, c.created_at)
+    END DESC
+  `).all(userId);
+  return Promise.all(userChats.map(({ id }) => chatSummary(id, userId)));
 }
 
 function publish(userId, event) {
@@ -512,37 +476,39 @@ function publish(userId, event) {
   }
 }
 
-function expireCalls() {
+async function expireCalls() {
   const now = Date.now();
   for (const [callId, call] of calls) {
     if (call.expiresAt <= now) {
       calls.delete(callId);
-      database.prepare("UPDATE call_history SET status = 'missed', ended_at = ? WHERE id = ? AND status = 'ringing'").run(new Date(now).toISOString(), callId);
+      await database.prepare("UPDATE call_history SET status = 'missed', ended_at = ? WHERE id = ? AND status = 'ringing'").run(new Date(now).toISOString(), callId);
       const event = { type: "call", action: "ended", callId, reason: "no-answer" };
-      recordUserActivity(call.calleeId, "call.missed", { type: call.type });
+      await recordUserActivity(call.calleeId, "call.missed", { type: call.type });
       publish(call.callerId, event);
       publish(call.calleeId, event);
-      sendChatUpdate(call.chatId);
+      await sendChatUpdate(call.chatId);
     }
   }
 }
 
-setInterval(expireCalls, 30_000).unref();
+setInterval(() => {
+  expireCalls().catch((error) => console.error("Could not expire calls:", error));
+}, 30_000).unref();
 
-function ensureMember(chatId, userId) {
-  if (!database.prepare("SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?").get(chatId, userId)) {
+async function ensureMember(chatId, userId) {
+  if (!await database.prepare("SELECT 1 FROM chat_members WHERE chat_id = ? AND user_id = ?").get(chatId, userId)) {
     throw new HttpError(404, "Conversation not found.");
   }
 }
 
-function sendChatUpdate(chatId) {
-  const members = database.prepare("SELECT user_id FROM chat_members WHERE chat_id = ?").all(chatId);
-  for (const member of members) publish(member.user_id, { type: "chats", chats: getUserChats(member.user_id) });
+async function sendChatUpdate(chatId) {
+  const members = await database.prepare("SELECT user_id FROM chat_members WHERE chat_id = ?").all(chatId);
+  for (const member of members) publish(member.user_id, { type: "chats", chats: await getUserChats(member.user_id) });
 }
 
-function publishPresenceUpdates(userId) {
-  publish(userId, { type: "chats", chats: getUserChats(userId) });
-  const contacts = database.prepare(`
+async function publishPresenceUpdates(userId) {
+  publish(userId, { type: "chats", chats: await getUserChats(userId) });
+  const contacts = await database.prepare(`
     SELECT DISTINCT other.user_id AS id
     FROM chats c
     JOIN chat_members current ON current.chat_id = c.id
@@ -550,7 +516,7 @@ function publishPresenceUpdates(userId) {
     WHERE c.type = 'direct' AND current.user_id = ? AND other.user_id != ?
   `).all(userId, userId);
   for (const contact of contacts) {
-    publish(contact.id, { type: "chats", chats: getUserChats(contact.id) });
+    publish(contact.id, { type: "chats", chats: await getUserChats(contact.id) });
   }
 }
 
@@ -567,11 +533,11 @@ async function handleApi(request, response, url) {
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
     if (password.length < 8 || password.length > 128) throw new HttpError(400, "Password must be 8 to 128 characters.");
-    if (database.prepare("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE").get(email)) throw new HttpError(409, "An account with that email already exists. Log in instead.");
-    if (database.prepare("SELECT 1 FROM users WHERE phone = ?").get(phone)) throw new HttpError(409, "An account with that phone number already exists.");
+    if (await database.prepare("SELECT 1 FROM users WHERE email = ?").get(email)) throw new HttpError(409, "An account with that email already exists. Log in instead.");
+    if (await database.prepare("SELECT 1 FROM users WHERE phone = ?").get(phone)) throw new HttpError(409, "An account with that phone number already exists.");
     const now = Date.now();
-    database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE AND expires_at <= ?").run(email, now);
-    const pending = database.prepare("SELECT last_sent_at, expires_at FROM pending_registrations WHERE email = ? COLLATE NOCASE").get(email);
+    await database.prepare("DELETE FROM pending_registrations WHERE email = ? AND expires_at <= ?").run(email, now);
+    const pending = await database.prepare("SELECT last_sent_at, expires_at FROM pending_registrations WHERE email = ?").get(email);
     if (pending && now - pending.last_sent_at < verificationResendDelay) {
       const seconds = Math.ceil((verificationResendDelay - (now - pending.last_sent_at)) / 1000);
       throw new HttpError(429, `Please wait ${seconds} seconds before requesting another code.`);
@@ -581,7 +547,7 @@ async function handleApi(request, response, url) {
     const code = String(randomInt(0, 1000000)).padStart(6, "0");
     const codeHash = verificationCodeHash(email, code);
     const emailContent = verificationEmail(name, code);
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO pending_registrations (email, name, phone, password_hash, password_salt, verification_hash, attempts, expires_at, last_sent_at)
       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
       ON CONFLICT(email) DO UPDATE SET
@@ -592,7 +558,7 @@ async function handleApi(request, response, url) {
     try {
       await sendBrevoEmail({ email, name, ...emailContent });
     } catch (error) {
-      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE AND verification_hash = ?").run(email, codeHash);
+      await database.prepare("DELETE FROM pending_registrations WHERE email = ? AND verification_hash = ?").run(email, codeHash);
       throw error;
     }
     return respond(response, 200, { sent: true, email });
@@ -605,11 +571,11 @@ async function handleApi(request, response, url) {
     const input = await readJson(request);
     const email = cleanText(input.email, "Email", 254).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
-    const pending = database.prepare("SELECT * FROM pending_registrations WHERE email = ? COLLATE NOCASE").get(email);
+    const pending = await database.prepare("SELECT * FROM pending_registrations WHERE email = ?").get(email);
     if (!pending) throw new HttpError(400, "No active verification request was found. Return to registration and request a new code.");
     const now = Date.now();
     if (pending.expires_at <= now) {
-      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
+      await database.prepare("DELETE FROM pending_registrations WHERE email = ?").run(email);
       throw new HttpError(400, "That code has expired. Return to registration and request a new one.");
     }
     const code = typeof input.code === "string" ? input.code.trim() : "";
@@ -620,28 +586,23 @@ async function handleApi(request, response, url) {
     if (!isCodeCorrect) {
       const attempts = pending.attempts + 1;
       if (attempts >= maxVerificationAttempts) {
-        database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
+        await database.prepare("DELETE FROM pending_registrations WHERE email = ?").run(email);
         throw new HttpError(429, "Too many incorrect codes. Return to registration and request a new one.");
       }
-      database.prepare("UPDATE pending_registrations SET attempts = ? WHERE email = ? COLLATE NOCASE").run(attempts, email);
+      await database.prepare("UPDATE pending_registrations SET attempts = ? WHERE email = ?").run(attempts, email);
       throw new HttpError(400, `That code is not correct. ${maxVerificationAttempts - attempts} attempts remaining.`);
     }
 
     const id = randomBytes(16).toString("hex");
     const createdAt = new Date(now).toISOString();
-    database.exec("BEGIN IMMEDIATE");
-    try {
-      database.prepare("INSERT INTO users (id, name, email, phone, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+    await database.transaction(async (transaction) => {
+      await transaction.prepare("INSERT INTO users (id, name, email, phone, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
         id, pending.name, email, pending.phone, pending.password_hash, pending.password_salt, createdAt
       );
-      recordUserActivity(id, "account.created");
-      database.prepare("DELETE FROM pending_registrations WHERE email = ? COLLATE NOCASE").run(email);
-      database.exec("COMMIT");
-    } catch (error) {
-      database.exec("ROLLBACK");
-      throw error;
-    }
-    setSession(response, id);
+      await recordUserActivity(id, "account.created", {}, transaction);
+      await transaction.prepare("DELETE FROM pending_registrations WHERE email = ?").run(email);
+    });
+    await setSession(response, id);
     let welcomeEmailSent = true;
     try {
       const welcome = welcomeEmail(pending.name);
@@ -661,19 +622,19 @@ async function handleApi(request, response, url) {
     const input = await readJson(request);
     const email = cleanText(input.email, "Email", 254).toLowerCase();
     const password = typeof input.password === "string" ? input.password : "";
-    const user = database.prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE").get(email);
+    const user = await database.prepare("SELECT * FROM users WHERE email = ?").get(email);
     const supplied = await scrypt(password, user?.password_salt || "invalid-account-salt", 64);
     const expected = Buffer.from(user?.password_hash || "00".repeat(64), "hex");
     if (!user || !timingSafeEqual(supplied, expected)) throw new HttpError(401, "Email or password is incorrect.");
-    recordUserActivity(user.id, "session.signed_in");
-    setSession(response, user.id);
-    return respond(response, 200, { user: publicUser(user), chats: getUserChats(user.id) });
+    await recordUserActivity(user.id, "session.signed_in");
+    await setSession(response, user.id);
+    return respond(response, 200, { user: publicUser(user), chats: await getUserChats(user.id) });
   }
 
   if (route === "POST /api/logout") {
-    const current = findSession(request);
-    if (current?.role === "user") recordUserActivity(current.userId, "session.signed_out");
-    clearSession(request, response);
+    const current = await findSession(request);
+    if (current?.role === "user") await recordUserActivity(current.userId, "session.signed_out");
+    await clearSession(request, response);
     return respond(response, 200, { ok: true });
   }
 
@@ -684,39 +645,39 @@ async function handleApi(request, response, url) {
     const input = await readJson(request);
     const supplied = createHash("sha256").update(typeof input.password === "string" ? input.password : "").digest();
     if (!timingSafeEqual(supplied, moderatorPasswordHash)) throw new HttpError(401, "Moderator password is incorrect.");
-    setSession(response, null, "moderator");
-    recordAdminAccess("signed_in");
+    await setSession(response, null, "moderator");
+    await recordAdminAccess("signed_in");
     return respond(response, 200, { authenticated: true });
   }
 
   if (route === "GET /api/moderation/session") {
-    const current = findSession(request, response);
+    const current = await findSession(request, response);
     return respond(response, 200, { authenticated: current?.role === "moderator" });
   }
 
   if (route === "POST /api/moderation/logout") {
-    const current = requireModerator(request, response);
-    recordAdminAccess("signed_out");
-    clearSession(request, response);
+    const current = await requireModerator(request, response);
+    await recordAdminAccess("signed_out");
+    await clearSession(request, response);
     return respond(response, 200, { ok: true, wasModerator: current.role === "moderator" });
   }
 
   if (route === "GET /api/moderation/overview") {
-    requireModerator(request, response);
-    const users = database.prepare("SELECT COUNT(*) AS count FROM users").get().count;
-    const conversations = database.prepare("SELECT COUNT(*) AS count FROM chats").get().count;
-    const messages = database.prepare("SELECT COUNT(*) AS count FROM messages").get().count;
-    const reports = database.prepare("SELECT COUNT(*) AS count FROM message_reports WHERE status = 'open'").get().count;
-    const calls = database.prepare(`
+    await requireModerator(request, response);
+    const users = Number((await database.prepare("SELECT COUNT(*) AS count FROM users").get()).count);
+    const conversations = Number((await database.prepare("SELECT COUNT(*) AS count FROM chats").get()).count);
+    const messages = Number((await database.prepare("SELECT COUNT(*) AS count FROM messages").get()).count);
+    const reports = Number((await database.prepare("SELECT COUNT(*) AS count FROM message_reports WHERE status = 'open'").get()).count);
+    const calls = await database.prepare(`
       SELECT COUNT(*) AS total,
         SUM(CASE WHEN status = 'missed' OR status = 'cancelled' THEN 1 ELSE 0 END) AS missed,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
       FROM call_history
     `).get();
-    const activity24Hours = database.prepare("SELECT COUNT(*) AS count FROM user_activity WHERE created_at >= ?").get(
+    const activity24Hours = Number((await database.prepare("SELECT COUNT(*) AS count FROM user_activity WHERE created_at >= ?").get(
       new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    ).count;
-    const recentUsers = database.prepare(`
+    )).count);
+    const recentUsers = await database.prepare(`
       SELECT id, name, email, phone, created_at AS createdAt
       FROM users ORDER BY created_at DESC LIMIT 5
     `).all();
@@ -726,9 +687,9 @@ async function handleApi(request, response, url) {
         conversations,
         messages,
         openReports: reports,
-        calls: calls.total,
-        missedCalls: calls.missed || 0,
-        completedCalls: calls.completed || 0,
+        calls: Number(calls.total),
+        missedCalls: Number(calls.missed || 0),
+        completedCalls: Number(calls.completed || 0),
         activity24Hours
       },
       recentUsers
@@ -736,49 +697,60 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/moderation/users") {
-    requireModerator(request, response);
+    await requireModerator(request, response);
     const search = (url.searchParams.get("search") || "").trim().slice(0, 120);
     const pattern = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : null;
-    const users = database.prepare(`
-      SELECT u.id, u.name, u.email, u.phone, u.created_at AS createdAt,
-        (SELECT MAX(a.created_at) FROM user_activity a WHERE a.user_id = u.id) AS lastActiveAt
+    const baseQuery = `
+      SELECT u.id, u.name, u.email, u.phone, u.created_at AS "createdAt",
+        last_activity."lastActiveAt" AS "lastActiveAt"
       FROM users u
-      WHERE (? IS NULL OR u.name LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR u.email LIKE ? ESCAPE '\\' COLLATE NOCASE OR u.phone LIKE ? ESCAPE '\\')
-      ORDER BY u.created_at DESC LIMIT 200
-    `).all(pattern, pattern, pattern, pattern);
+      LEFT JOIN (
+        SELECT user_id, MAX(created_at) AS "lastActiveAt"
+        FROM user_activity
+        GROUP BY user_id
+      ) last_activity ON last_activity.user_id = u.id
+    `;
+    const users = pattern
+      ? await database.prepare(`${baseQuery} WHERE LOWER(u.name) LIKE LOWER(?) OR LOWER(u.email) LIKE LOWER(?) OR LOWER(u.phone) LIKE LOWER(?) ORDER BY u.created_at DESC LIMIT 200`).all(pattern, pattern, pattern)
+      : await database.prepare(`${baseQuery} ORDER BY u.created_at DESC LIMIT 200`).all();
     return respond(response, 200, { users });
   }
 
   if (route === "GET /api/moderation/activity") {
-    requireModerator(request, response);
+    await requireModerator(request, response);
     const userId = url.searchParams.get("userId") || null;
     const search = (url.searchParams.get("search") || "").trim().slice(0, 120);
     const pattern = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : null;
     const offsetValue = Number(url.searchParams.get("offset") || 0);
     if (!Number.isSafeInteger(offsetValue) || offsetValue < 0) throw new HttpError(400, "Invalid activity page.");
     const limit = 100;
-    const filters = `
-      (? IS NULL OR a.user_id = ?)
-      AND (? IS NULL OR u.name LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR u.email LIKE ? ESCAPE '\\' COLLATE NOCASE OR u.phone LIKE ? ESCAPE '\\')
-    `;
-    const total = database.prepare(`
+    const conditions = [];
+    const values = [];
+    if (userId) {
+      conditions.push("a.user_id = ?");
+      values.push(userId);
+    }
+    if (pattern) {
+      conditions.push("(LOWER(u.name) LIKE LOWER(?) OR LOWER(u.email) LIKE LOWER(?) OR LOWER(u.phone) LIKE LOWER(?))");
+      values.push(pattern, pattern, pattern);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const total = Number((await database.prepare(`
       SELECT COUNT(*) AS count
       FROM user_activity a LEFT JOIN users u ON u.id = a.user_id
-      WHERE ${filters}
-    `).get(userId, userId, pattern, pattern, pattern, pattern).count;
-    const entries = database.prepare(`
+      ${whereClause}
+    `).get(...values)).count);
+    const entries = (await database.prepare(`
       SELECT a.id, a.user_id AS userId, a.action, a.details, a.created_at AS createdAt,
         u.name AS userName, u.email AS userEmail
       FROM user_activity a LEFT JOIN users u ON u.id = a.user_id
-      WHERE ${filters}
+      ${whereClause}
       ORDER BY a.created_at DESC LIMIT ? OFFSET ?
-    `).all(userId, userId, pattern, pattern, pattern, pattern, limit, offsetValue).map((entry) => ({
+    `).all(...values, limit, offsetValue)).map((entry) => ({
       id: entry.id,
       userId: entry.userId,
       action: entry.action,
-      details: JSON.parse(entry.details),
+      details: typeof entry.details === "string" ? JSON.parse(entry.details) : entry.details,
       createdAt: entry.createdAt,
       userName: entry.userName || "Deleted account",
       userEmail: entry.userEmail || ""
@@ -787,8 +759,8 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/moderation/calls") {
-    requireModerator(request, response);
-    const calls = database.prepare(`
+    await requireModerator(request, response);
+    const calls = await database.prepare(`
       SELECT c.id, c.type, c.status, c.created_at AS createdAt, c.accepted_at AS acceptedAt,
         c.ended_at AS endedAt, c.duration_seconds AS durationSeconds,
         caller.name AS callerName, caller.phone AS callerPhone,
@@ -802,30 +774,30 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/moderation/system") {
-    requireModerator(request, response);
-    const databaseStats = statSync(databasePath);
-    const activeSessions = database.prepare("SELECT COUNT(*) AS count FROM sessions WHERE expires_at >= ?").get(Date.now()).count;
-    const openReports = database.prepare("SELECT COUNT(*) AS count FROM message_reports WHERE status = 'open'").get().count;
+    await requireModerator(request, response);
+    const databaseStats = await database.prepare("SELECT pg_database_size(current_database()) AS bytes, (SELECT MAX(created_at) FROM user_activity) AS updated_at").get();
+    const activeSessions = Number((await database.prepare("SELECT COUNT(*) AS count FROM sessions WHERE expires_at >= ?").get(Date.now())).count);
+    const openReports = Number((await database.prepare("SELECT COUNT(*) AS count FROM message_reports WHERE status = 'open'").get()).count);
     return respond(response, 200, {
       status: "running",
       nodeVersion: process.version,
       uptimeSeconds: Math.floor(process.uptime()),
-      databaseBytes: databaseStats.size,
-      databaseUpdatedAt: databaseStats.mtime.toISOString(),
+      databaseBytes: Number(databaseStats.bytes),
+      databaseUpdatedAt: databaseStats.updated_at || new Date().toISOString(),
       activeSessions,
       openReports
     });
   }
 
   if (route === "GET /api/moderation/reports") {
-    requireModerator(request, response);
+    await requireModerator(request, response);
     const status = url.searchParams.get("status") || "open";
     if (!["open", "resolved", "dismissed", "all"].includes(status)) throw new HttpError(400, "Invalid report status filter.");
     const phoneDigits = (url.searchParams.get("phone") || "").replace(/\D/g, "");
     if (phoneDigits.length > 0 && phoneDigits.length < 3) throw new HttpError(400, "Enter at least 3 digits to search a phone number.");
     if (phoneDigits.length > 15) throw new HttpError(400, "Phone number search must be 15 digits or fewer.");
     const phonePattern = phoneDigits ? `%${phoneDigits}%` : null;
-    const reports = database.prepare(`
+    const reports = await database.prepare(`
       SELECT r.id, r.chat_id, r.message_id, r.reason, r.status, r.created_at,
         m.text AS message_text, m.attachment_name,
         sender.name AS sender_name, sender.phone AS sender_phone,
@@ -846,8 +818,8 @@ async function handleApi(request, response, url) {
     const now = new Date().toISOString();
     const addAudit = database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, ?, 'viewed', ?)");
     for (const report of reports) {
-      addAudit.run(randomBytes(16).toString("hex"), report.id, "moderator", now);
-      recordAdminAccess("report_viewed", report.id);
+      await addAudit.run(randomBytes(16).toString("hex"), report.id, "moderator", now);
+      await recordAdminAccess("report_viewed", report.id);
     }
     return respond(response, 200, { reports: reports.map((report) => ({
       id: report.id,
@@ -867,8 +839,8 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/moderation/audit") {
-    requireModerator(request, response);
-    const entries = database.prepare(`
+    await requireModerator(request, response);
+    const entries = await database.prepare(`
       SELECT combined.report_id AS reportId, combined.action, combined.actor_id AS actorId, combined.created_at AS createdAt
       FROM (
         SELECT a.report_id, a.action, a.actor_id, a.created_at FROM moderation_audit a
@@ -882,39 +854,39 @@ async function handleApi(request, response, url) {
 
   const moderationReportRoute = url.pathname.match(/^\/api\/moderation\/reports\/([a-f0-9]+)$/);
   if (moderationReportRoute && request.method === "PATCH") {
-    const moderator = requireModerator(request, response);
+    const moderator = await requireModerator(request, response);
     const [, reportId] = moderationReportRoute;
     const input = await readJson(request);
     if (!["resolved", "dismissed"].includes(input.status)) throw new HttpError(400, "Choose resolved or dismissed.");
-    const result = database.prepare(`
+    const result = await database.prepare(`
       UPDATE message_reports SET status = ? WHERE id = ? AND status = 'open'
     `).run(input.status, reportId);
     if (!result.changes) throw new HttpError(404, "Open report not found.");
-    database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, ?, ?, ?)").run(
+    await database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, ?, ?, ?)").run(
       randomBytes(16).toString("hex"), reportId, moderator.role, input.status, new Date().toISOString()
     );
-    recordAdminAccess(`report_${input.status}`, reportId);
+    await recordAdminAccess(`report_${input.status}`, reportId);
     return respond(response, 200, { ok: true });
   }
 
   if (route === "GET /api/session" || route === "GET /api/me") {
-    const session = findSession(request, response);
+    const session = await findSession(request, response);
     if (!session || session.role !== "user") return respond(response, 200, { user: null, chats: [] });
-    const user = database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId);
-    return respond(response, 200, { user, chats: getUserChats(session.userId) });
+    const user = await database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId);
+    return respond(response, 200, { user, chats: await getUserChats(session.userId) });
   }
 
-  const session = requireSession(request, response);
+  const session = await requireSession(request, response);
   if (route === "GET /api/rtc-config") return respond(response, 200, { iceServers });
 
   if (route === "POST /api/calls") {
-    expireCalls();
+    await expireCalls();
     const input = await readJson(request);
     if (typeof input.chatId !== "string" || !input.chatId) throw new HttpError(400, "Choose a direct conversation to call.");
     if (!["audio", "video"].includes(input.type)) throw new HttpError(400, "Choose an audio or video call.");
-    const chat = database.prepare("SELECT type FROM chats WHERE id = ?").get(input.chatId);
+    const chat = await database.prepare("SELECT type FROM chats WHERE id = ?").get(input.chatId);
     if (!chat || chat.type !== "direct") throw new HttpError(400, "Calls are available only in direct conversations.");
-    const members = database.prepare(`
+    const members = await database.prepare(`
       SELECT user_id FROM chat_members WHERE chat_id = ? ORDER BY user_id
     `).all(input.chatId);
     if (members.length !== 2 || !members.some((member) => member.user_id === session.userId)) {
@@ -938,12 +910,12 @@ async function handleApi(request, response, url) {
       expiresAt: Date.now() + callRingLifetime
     };
     calls.set(callId, call);
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO call_history (id, chat_id, caller_id, callee_id, type, status, created_at)
       VALUES (?, ?, ?, ?, ?, 'ringing', ?)
     `).run(callId, input.chatId, session.userId, calleeId, input.type, new Date().toISOString());
-    recordUserActivity(session.userId, "call.started", { type: input.type });
-    const caller = database.prepare("SELECT name FROM users WHERE id = ?").get(session.userId);
+    await recordUserActivity(session.userId, "call.started", { type: input.type });
+    const caller = await database.prepare("SELECT name FROM users WHERE id = ?").get(session.userId);
     publish(calleeId, {
       type: "call",
       action: "incoming",
@@ -952,13 +924,13 @@ async function handleApi(request, response, url) {
       callerName: caller.name,
       callType: call.type
     });
-    sendChatUpdate(call.chatId);
+    await sendChatUpdate(call.chatId);
     return respond(response, 201, { callId });
   }
 
   const callRoute = url.pathname.match(/^\/api\/calls\/([a-f0-9]{32})\/(accept|decline|end|signal)$/);
   if (callRoute && request.method === "POST") {
-    expireCalls();
+    await expireCalls();
     const [, callId, action] = callRoute;
     const call = calls.get(callId);
     if (!call) throw new HttpError(404, "This call is no longer available.");
@@ -969,19 +941,19 @@ async function handleApi(request, response, url) {
       call.status = "active";
       call.acceptedAt = Date.now();
       call.expiresAt = Date.now() + callLifetime;
-      database.prepare("UPDATE call_history SET status = 'active', accepted_at = ? WHERE id = ?").run(new Date(call.acceptedAt).toISOString(), callId);
-      recordUserActivity(session.userId, "call.answered", { type: call.type });
+      await database.prepare("UPDATE call_history SET status = 'active', accepted_at = ? WHERE id = ?").run(new Date(call.acceptedAt).toISOString(), callId);
+      await recordUserActivity(session.userId, "call.answered", { type: call.type });
       publish(call.callerId, { type: "call", action: "accepted", callId });
-      sendChatUpdate(call.chatId);
+      await sendChatUpdate(call.chatId);
       return respond(response, 200, { ok: true });
     }
     if (action === "decline") {
       if (session.userId !== call.calleeId || call.status !== "ringing") throw new HttpError(409, "This call cannot be declined.");
       calls.delete(callId);
-      database.prepare("UPDATE call_history SET status = 'declined', ended_at = ? WHERE id = ?").run(new Date().toISOString(), callId);
-      recordUserActivity(session.userId, "call.declined", { type: call.type });
+      await database.prepare("UPDATE call_history SET status = 'declined', ended_at = ? WHERE id = ?").run(new Date().toISOString(), callId);
+      await recordUserActivity(session.userId, "call.declined", { type: call.type });
       publish(call.callerId, { type: "call", action: "declined", callId });
-      sendChatUpdate(call.chatId);
+      await sendChatUpdate(call.chatId);
       return respond(response, 200, { ok: true });
     }
     if (action === "end") {
@@ -989,12 +961,12 @@ async function handleApi(request, response, url) {
       const endedAt = Date.now();
       const status = call.status === "active" ? "completed" : session.userId === call.callerId ? "cancelled" : "missed";
       const durationSeconds = call.acceptedAt ? Math.max(0, Math.floor((endedAt - call.acceptedAt) / 1000)) : 0;
-      database.prepare("UPDATE call_history SET status = ?, ended_at = ?, duration_seconds = ? WHERE id = ?").run(
+      await database.prepare("UPDATE call_history SET status = ?, ended_at = ?, duration_seconds = ? WHERE id = ?").run(
         status, new Date(endedAt).toISOString(), durationSeconds, callId
       );
-      recordUserActivity(session.userId, "call.ended", { type: call.type, status, durationSeconds });
+      await recordUserActivity(session.userId, "call.ended", { type: call.type, status, durationSeconds });
       publish(otherId, { type: "call", action: "ended", callId, reason: status });
-      sendChatUpdate(call.chatId);
+      await sendChatUpdate(call.chatId);
       return respond(response, 200, { ok: true });
     }
     if (call.status !== "active") throw new HttpError(409, "The call has not been accepted yet.");
@@ -1007,7 +979,7 @@ async function handleApi(request, response, url) {
     return respond(response, 200, { ok: true });
   }
 
-  if (route === "GET /api/chats") return respond(response, 200, { chats: getUserChats(session.userId) });
+  if (route === "GET /api/chats") return respond(response, 200, { chats: await getUserChats(session.userId) });
 
   if (route === "GET /api/events") {
     response.writeHead(200, {
@@ -1019,13 +991,16 @@ async function handleApi(request, response, url) {
     const streams = eventStreams.get(session.token) || new Set();
     streams.add(response);
     eventStreams.set(session.token, streams);
-    response.write(`data: ${JSON.stringify({ type: "chats", chats: getUserChats(session.userId) })}\n\n`);
-    publishPresenceUpdates(session.userId);
+    response.write(`data: ${JSON.stringify({ type: "chats", chats: await getUserChats(session.userId) })}\n\n`);
+    await publishPresenceUpdates(session.userId);
     const heartbeat = setInterval(() => {
       const activeSession = sessions.get(session.token);
       if (activeSession) {
         activeSession.expiresAt = Date.now() + sessionLifetime;
-        database.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").run(activeSession.expiresAt, hashSessionToken(session.token));
+        database.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").run(activeSession.expiresAt, hashSessionToken(session.token)).catch((error) => {
+          console.error("Could not extend session:", error);
+          response.end();
+        });
       }
       response.write(": heartbeat\n\n");
     }, 25000);
@@ -1033,13 +1008,15 @@ async function handleApi(request, response, url) {
       clearInterval(heartbeat);
       streams.delete(response);
       if (!streams.size) eventStreams.delete(session.token);
-      if (!isUserOnline(session.userId)) publishPresenceUpdates(session.userId);
+      if (!isUserOnline(session.userId)) {
+        publishPresenceUpdates(session.userId).catch((error) => console.error("Could not update online status:", error));
+      }
     });
     return;
   }
 
   if (route === "GET /api/contacts") {
-    const contacts = database.prepare(`
+    const contacts = await database.prepare(`
       SELECT u.id, c.display_name AS name, u.phone, u.email
       FROM contacts c JOIN users u ON u.id = c.contact_id
       WHERE c.owner_id = ? ORDER BY c.display_name COLLATE NOCASE
@@ -1052,46 +1029,47 @@ async function handleApi(request, response, url) {
     const name = cleanText(input.name, "Name", 40);
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     const phone = normalizePhone(input.phone);
-    const contact = database.prepare("SELECT id, name, email, phone FROM users WHERE phone = ?").get(phone);
+    const contact = await database.prepare("SELECT id, name, email, phone FROM users WHERE phone = ?").get(phone);
     if (!contact) throw new HttpError(404, "No Chatter account uses that phone number yet.");
     if (contact.id === session.userId) throw new HttpError(400, "You cannot add your own number as a contact.");
-    database.prepare("INSERT INTO contacts (owner_id, contact_id, display_name) VALUES (?, ?, ?) ON CONFLICT(owner_id, contact_id) DO UPDATE SET display_name = excluded.display_name").run(session.userId, contact.id, name);
-    recordUserActivity(session.userId, "contact.added");
-    let chat = database.prepare(`
+    await database.prepare("INSERT INTO contacts (owner_id, contact_id, display_name) VALUES (?, ?, ?) ON CONFLICT(owner_id, contact_id) DO UPDATE SET display_name = excluded.display_name").run(session.userId, contact.id, name);
+    await recordUserActivity(session.userId, "contact.added");
+    let chat = await database.prepare(`
       SELECT c.id FROM chats c JOIN chat_members a ON a.chat_id = c.id JOIN chat_members b ON b.chat_id = c.id
       WHERE c.type = 'direct' AND a.user_id = ? AND b.user_id = ?
     `).get(session.userId, contact.id);
     if (!chat) {
       const id = randomBytes(16).toString("hex");
-      database.prepare("INSERT INTO chats (id, type, created_by, created_at) VALUES (?, 'direct', ?, ?)").run(id, session.userId, new Date().toISOString());
+      await database.prepare("INSERT INTO chats (id, type, created_by, created_at) VALUES (?, 'direct', ?, ?)").run(id, session.userId, new Date().toISOString());
       const insertMember = database.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)");
-      insertMember.run(id, session.userId);
-      insertMember.run(id, contact.id);
+      await insertMember.run(id, session.userId);
+      await insertMember.run(id, contact.id);
       chat = { id };
     }
-    sendChatUpdate(chat.id);
-    return respond(response, 201, { chat: chatSummary(chat.id, session.userId) });
+    await sendChatUpdate(chat.id);
+    return respond(response, 201, { chat: await chatSummary(chat.id, session.userId) });
   }
 
   const messageReportRoute = url.pathname.match(/^\/api\/chats\/([a-f0-9]+)\/messages\/([a-f0-9]+)\/report$/);
   if (messageReportRoute && request.method === "POST") {
     const [, chatId, messageId] = messageReportRoute;
-    ensureMember(chatId, session.userId);
-    const message = database.prepare("SELECT sender_id FROM messages WHERE id = ? AND chat_id = ?").get(messageId, chatId);
+    await ensureMember(chatId, session.userId);
+    const message = await database.prepare("SELECT sender_id FROM messages WHERE id = ? AND chat_id = ?").get(messageId, chatId);
     if (!message) throw new HttpError(404, "Message not found in this conversation.");
     if (message.sender_id === session.userId) throw new HttpError(400, "You can only report a message sent by someone else.");
     const input = await readJson(request);
     const reason = cleanText(input.reason, "Report reason", 300);
     if (reason.length < 4) throw new HttpError(400, "Please explain why you are reporting this message.");
     const id = randomBytes(16).toString("hex");
-    database.prepare(`
+    await database.prepare(`
       INSERT INTO message_reports (id, chat_id, message_id, reporter_id, reason, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, chatId, messageId, session.userId, reason, new Date().toISOString());
-    database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, ?, 'reported', ?)").run(
+    await database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, ?, 'reported', ?)").run(
       randomBytes(16).toString("hex"), id, session.userId, new Date().toISOString()
     );
-    recordUserActivity(session.userId, "message.reported", { conversationType: database.prepare("SELECT type FROM chats WHERE id = ?").get(chatId).type });
+    const reportedChat = await database.prepare("SELECT type FROM chats WHERE id = ?").get(chatId);
+    await recordUserActivity(session.userId, "message.reported", { conversationType: reportedChat.type });
     return respond(response, 201, { ok: true, reportId: id });
   }
 
@@ -1103,37 +1081,37 @@ async function handleApi(request, response, url) {
     const memberIds = Array.isArray(input.memberIds) ? [...new Set(input.memberIds.filter((id) => typeof id === "string" && id !== session.userId))] : [];
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     if (!memberIds.length) throw new HttpError(400, "Choose at least one contact.");
-    const available = database.prepare(`SELECT contact_id AS id FROM contacts WHERE owner_id = ?`).all(session.userId).map((row) => row.id);
+    const available = (await database.prepare(`SELECT contact_id AS id FROM contacts WHERE owner_id = ?`).all(session.userId)).map((row) => row.id);
     if (memberIds.some((id) => !available.includes(id))) throw new HttpError(403, "Groups can only include contacts you have saved.");
     const id = randomBytes(16).toString("hex");
     const createdAt = new Date().toISOString();
-    database.prepare("INSERT INTO chats (id, type, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(id, type, name, description, session.userId, createdAt);
+    await database.prepare("INSERT INTO chats (id, type, name, description, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(id, type, name, description, session.userId, createdAt);
     const insertMember = database.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)");
-    insertMember.run(id, session.userId);
-    memberIds.forEach((memberId) => insertMember.run(id, memberId));
-    recordUserActivity(session.userId, "conversation.created", { type, memberCount: memberIds.length + 1 });
-    sendChatUpdate(id);
-    return respond(response, 201, { chat: chatSummary(id, session.userId) });
+    await insertMember.run(id, session.userId);
+    for (const memberId of memberIds) await insertMember.run(id, memberId);
+    await recordUserActivity(session.userId, "conversation.created", { type, memberCount: memberIds.length + 1 });
+    await sendChatUpdate(id);
+    return respond(response, 201, { chat: await chatSummary(id, session.userId) });
   }
 
   if (route === "POST /api/self-chat") {
-    const existing = database.prepare("SELECT id FROM chats WHERE type = 'self' AND created_by = ?").get(session.userId);
-    if (existing) return respond(response, 200, { chat: chatSummary(existing.id, session.userId) });
+    const existing = await database.prepare("SELECT id FROM chats WHERE type = 'self' AND created_by = ?").get(session.userId);
+    if (existing) return respond(response, 200, { chat: await chatSummary(existing.id, session.userId) });
     const id = randomBytes(16).toString("hex");
-    database.prepare("INSERT INTO chats (id, type, created_by, created_at) VALUES (?, 'self', ?, ?)").run(id, session.userId, new Date().toISOString());
-    database.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)").run(id, session.userId);
-    recordUserActivity(session.userId, "conversation.created", { type: "self" });
-    sendChatUpdate(id);
-    return respond(response, 201, { chat: chatSummary(id, session.userId) });
+    await database.prepare("INSERT INTO chats (id, type, created_by, created_at) VALUES (?, 'self', ?, ?)").run(id, session.userId, new Date().toISOString());
+    await database.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)").run(id, session.userId);
+    await recordUserActivity(session.userId, "conversation.created", { type: "self" });
+    await sendChatUpdate(id);
+    return respond(response, 201, { chat: await chatSummary(id, session.userId) });
   }
 
   const chatRoute = url.pathname.match(/^\/api\/chats\/([a-f0-9]+)(?:\/(messages|contact))?$/);
   if (chatRoute) {
     const [, chatId, resource] = chatRoute;
-    ensureMember(chatId, session.userId);
-    const chat = database.prepare("SELECT * FROM chats WHERE id = ?").get(chatId);
+    await ensureMember(chatId, session.userId);
+    const chat = await database.prepare("SELECT * FROM chats WHERE id = ?").get(chatId);
 
-    if (request.method === "GET" && resource === "messages") return respond(response, 200, { chat: chatSummary(chatId, session.userId) });
+    if (request.method === "GET" && resource === "messages") return respond(response, 200, { chat: await chatSummary(chatId, session.userId) });
 
     if (request.method === "POST" && resource === "messages") {
       const input = await readJson(request);
@@ -1144,9 +1122,9 @@ async function handleApi(request, response, url) {
       if (!text && !attachment) throw new HttpError(400, "Write a message before sending.");
       if (text.length > 4000) throw new HttpError(400, "Messages must be 4,000 characters or fewer.");
       const createdAt = new Date().toISOString();
-      database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(randomBytes(16).toString("hex"), chatId, session.userId, text, attachment?.name || null, attachment?.size || null, createdAt);
-      recordUserActivity(session.userId, "message.sent", { conversationType: chat.type, hasAttachment: Boolean(attachment) });
-      sendChatUpdate(chatId);
+      await database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(randomBytes(16).toString("hex"), chatId, session.userId, text, attachment?.name || null, attachment?.size || null, createdAt);
+      await recordUserActivity(session.userId, "message.sent", { conversationType: chat.type, hasAttachment: Boolean(attachment) });
+      await sendChatUpdate(chatId);
       return respond(response, 201, { message: { from: "you", text, time: new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), ...(attachment ? { attachment } : {}) } });
     }
 
@@ -1154,19 +1132,19 @@ async function handleApi(request, response, url) {
       const input = await readJson(request);
       const name = cleanText(input.name, "Name", 40);
       if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
-      const other = database.prepare("SELECT user_id FROM chat_members WHERE chat_id = ? AND user_id != ?").get(chatId, session.userId);
+      const other = await database.prepare("SELECT user_id FROM chat_members WHERE chat_id = ? AND user_id != ?").get(chatId, session.userId);
       if (!other) throw new HttpError(404, "Contact not found.");
-      database.prepare("INSERT INTO contacts (owner_id, contact_id, display_name) VALUES (?, ?, ?) ON CONFLICT(owner_id, contact_id) DO UPDATE SET display_name = excluded.display_name").run(session.userId, other.user_id, name);
-      recordUserActivity(session.userId, "contact.renamed");
-      sendChatUpdate(chatId);
-      return respond(response, 200, { chat: chatSummary(chatId, session.userId) });
+      await database.prepare("INSERT INTO contacts (owner_id, contact_id, display_name) VALUES (?, ?, ?) ON CONFLICT(owner_id, contact_id) DO UPDATE SET display_name = excluded.display_name").run(session.userId, other.user_id, name);
+      await recordUserActivity(session.userId, "contact.renamed");
+      await sendChatUpdate(chatId);
+      return respond(response, 200, { chat: await chatSummary(chatId, session.userId) });
     }
 
     if (request.method === "DELETE" && resource === "messages") {
-      database.prepare("DELETE FROM messages WHERE chat_id = ?").run(chatId);
-      recordUserActivity(session.userId, "conversation.cleared", { conversationType: chat.type });
-      sendChatUpdate(chatId);
-      return respond(response, 200, { chat: chatSummary(chatId, session.userId) });
+      await database.prepare("DELETE FROM messages WHERE chat_id = ?").run(chatId);
+      await recordUserActivity(session.userId, "conversation.cleared", { conversationType: chat.type });
+      await sendChatUpdate(chatId);
+      return respond(response, 200, { chat: await chatSummary(chatId, session.userId) });
     }
   }
 
@@ -1177,11 +1155,11 @@ async function handleApi(request, response, url) {
     const phone = normalizePhone(input.phone);
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
-    if (database.prepare("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE AND id != ?").get(email, session.userId)) throw new HttpError(409, "That email is already in use.");
-    if (database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(phone, session.userId)) throw new HttpError(409, "That phone number is already in use.");
-    database.prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?").run(name, email, phone, session.userId);
-    recordUserActivity(session.userId, "profile.updated");
-    return respond(response, 200, { user: publicUser(database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId)) });
+    if (await database.prepare("SELECT 1 FROM users WHERE email = ? AND id != ?").get(email, session.userId)) throw new HttpError(409, "That email is already in use.");
+    if (await database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(phone, session.userId)) throw new HttpError(409, "That phone number is already in use.");
+    await database.prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?").run(name, email, phone, session.userId);
+    await recordUserActivity(session.userId, "profile.updated");
+    return respond(response, 200, { user: publicUser(await database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId)) });
   }
 
   throw new HttpError(404, "API route not found.");
@@ -1224,7 +1202,7 @@ const server = createServer(async (request, response) => {
       respond(response, error.status, { error: error.message });
       return;
     }
-    if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
+    if (error.code === "23505") {
       respond(response, 409, { error: "That account detail is already in use." });
       return;
     }
@@ -1235,14 +1213,29 @@ const server = createServer(async (request, response) => {
 
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "127.0.0.1";
-server.listen(port, host, () => {
+async function startServer() {
+  await pool.query("SELECT 1 FROM public.users LIMIT 0");
+  await pool.query("DELETE FROM public.sessions WHERE expires_at < $1", [Date.now()]);
+  await pool.query("DELETE FROM public.pending_registrations WHERE expires_at < $1", [Date.now()]);
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, resolve);
+  });
   console.log(`Chatter is running at http://localhost:${port}`);
+}
+
+startServer().catch(async (error) => {
+  console.error("Could not start Chatter with Supabase. Check SUPABASE_DB_URL and run supabase-schema.sql in the Supabase SQL Editor.", error);
+  await pool.end();
+  process.exitCode = 1;
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     for (const streams of eventStreams.values()) for (const stream of streams) stream.end();
-    database.close();
-    server.close(() => process.exit(0));
+    server.close(async () => {
+      await database.close();
+      process.exit(0);
+    });
   });
 }

@@ -1,6 +1,6 @@
 # Chatter
 
-Chatter is a chat application served by Node.js. The server uses SQLite for accounts, contacts, conversations, groups, and messages, and server-sent events to deliver chat updates to connected browsers.
+Chatter is a chat application served by Node.js. It uses Supabase PostgreSQL for accounts, contacts, conversations, groups, messages, and activity, and server-sent events to deliver chat updates to connected browsers.
 
 ## Requirements
 
@@ -9,12 +9,14 @@ Chatter is a chat application served by Node.js. The server uses SQLite for acco
 
 ## Run locally
 
-1. Open a terminal in this project folder.
-2. Run `npm start`.
-3. Open `http://localhost:3000`.
-4. Register two accounts in separate browser profiles to try real messaging. Add the second account using its registered phone number.
+1. Create a Supabase project and run `supabase-schema.sql` in the Supabase SQL Editor.
+2. Set `SUPABASE_DB_URL` to the project's PostgreSQL connection URI.
+3. Configure the Brevo variables described below to enable account registration.
+4. Open a terminal in this project folder and run `npm start`.
+5. Open `http://localhost:3000`.
+6. Register two accounts in separate browser profiles to try real messaging. Add the second account using its registered phone number.
 
-The SQLite database is created at `data/chatter.sqlite` the first time the server starts. Keep the `data` directory to preserve accounts, messages, and sign-in sessions. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
+Before starting Chatter, create a Supabase project, run [`supabase-schema.sql`](./supabase-schema.sql) in its SQL Editor, and set `SUPABASE_DB_URL` to the project's PostgreSQL connection URI. Chatter uses the server-side PostgreSQL connection; it does not expose database credentials in browser code. Row-level security is enabled on the tables, with no public policies. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
 
 ## Brevo email verification
 
@@ -60,22 +62,22 @@ npm.cmd start
 
 Open `http://localhost:3000/moderation.html` and sign in with that password. Keep the password private and do not commit it to source control. If it is not configured, moderator sign-in stays disabled.
 
-This local setup does not send SMS verification codes or upload file contents. It is not configured for public internet hosting. Before deploying publicly, add rate limiting, backups, and a production hosting setup.
+This local setup does not send SMS verification codes or upload file contents. Before deploying publicly, add rate limiting and database backups.
 
 ## Render deployment
 
-The GitHub Pages URL serves static files only; it cannot run this Node.js server, SQLite database, or real-time calls. Deploy Chatter as a Render Web Service connected to this repository, with the build command `npm install` and start command `npm start`.
+The GitHub Pages URL serves static files only; it cannot run this Node.js server or real-time calls. Deploy Chatter as a Render Web Service connected to this repository, with the build command `npm install` and start command `npm start`. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor. Choose a Supabase PostgreSQL connection URI appropriate for Render (the Supabase session pooler is suitable) and set `SUPABASE_DB_URL` in Render's environment settings.
 
 Configure these Render environment variables:
 
 - `HOST=0.0.0.0`
 - `NODE_ENV=production`
-- `CHATTER_DATA_DIR=/var/data`
+- `SUPABASE_DB_URL` set to the Supabase PostgreSQL connection URI (keep this server-side secret)
 - `CHATTER_MODERATOR_PASSWORD` set through Render's secret environment-variable settings to a unique password of at least 20 characters
 - `CHATTER_ICE_SERVERS` with your production STUN/TURN configuration; TURN is needed for reliable calls across restrictive networks
 - `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for verified registration and welcome emails
 - `CHATTER_PUBLIC_URL` set to the HTTPS URL Render assigns to the deployed service, for the welcome-email button
 
-Attach a persistent Render disk mounted at `/var/data`. SQLite stores accounts, messages, reports, call history, and sessions there; without persistent storage those records can be lost when the service restarts or redeploys. Persistent disks and plan availability can affect hosting cost, so choose the Render plan and storage size before creating the service. Never add production secrets or database files to GitHub.
+Chatter stores data in Supabase PostgreSQL; it does not need a Render disk for the database. Existing SQLite data is not automatically imported—this Supabase setup starts fresh. Never add production secrets to GitHub or browser code.
 
-Before sharing the public service, configure backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access. Render serves the Node.js app at its own URL; the GitHub Pages link is not the live backend.
+The Supabase schema enables row-level security and defines no public access policies. The app connects from its Node.js server using `SUPABASE_DB_URL`; do not put a Supabase service-role key or database password in frontend code. Configure database backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access. Render serves the Node.js app at its own URL; the GitHub Pages link is not the live backend.
