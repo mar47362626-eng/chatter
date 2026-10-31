@@ -10,13 +10,13 @@ Chatter is a chat application served by Node.js. It uses Supabase PostgreSQL for
 ## Run locally
 
 1. Create a Supabase project and run `supabase-schema.sql` in the Supabase SQL Editor.
-2. Set `SUPABASE_DB_URL` to the project's PostgreSQL connection URI.
+2. Set `SUPABASE_PROJECT_ID` and `SUPABASE_SERVICE_ROLE_KEY` on the server.
 3. Configure the Brevo variables described below to enable account registration.
 4. Open a terminal in this project folder and run `npm start`.
 5. Open `http://localhost:3000`.
 6. Register two accounts in separate browser profiles to try real messaging. Add the second account using its registered phone number.
 
-Before starting Chatter, create a Supabase project, run [`supabase-schema.sql`](./supabase-schema.sql) in its SQL Editor, and set `SUPABASE_DB_URL` to the project's PostgreSQL connection URI. Chatter uses the server-side PostgreSQL connection; it does not expose database credentials in browser code. Row-level security is enabled on the tables, with no public policies. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
+Before starting Chatter, create a Supabase project and run [`supabase-schema.sql`](./supabase-schema.sql) in its SQL Editor. Configure `SUPABASE_PROJECT_ID` and `SUPABASE_SERVICE_ROLE_KEY` on the server. Chatter calls private Supabase database RPC functions through the server-side REST API; the service-role key is never sent to browsers. The schema enables row-level security without public table policies and grants the database RPC functions only to the `service_role`. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
 
 ## Brevo email verification
 
@@ -66,13 +66,14 @@ This local setup does not send SMS verification codes or upload file contents. B
 
 ## Render deployment
 
-The GitHub Pages URL serves static files only; it cannot run this Node.js server or real-time calls. Deploy Chatter as a Render Web Service connected to this repository, with the build command `npm install` and start command `npm start`. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor. Choose a Supabase PostgreSQL connection URI appropriate for Render (the Supabase session pooler is suitable) and set `SUPABASE_DB_URL` in Render's environment settings.
+The GitHub Pages URL serves static files only; it cannot run this Node.js server or real-time calls. Deploy Chatter as a Render Web Service connected to this repository, with the build command `npm install` and start command `npm start`. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor.
 
 Configure these Render environment variables:
 
 - `HOST=0.0.0.0`
 - `NODE_ENV=production`
-- `SUPABASE_DB_URL` set to the Supabase PostgreSQL connection URI (keep this server-side secret)
+- `SUPABASE_PROJECT_ID` set to the project reference from the Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` set to the project service-role key (server-side secret)
 - `CHATTER_MODERATOR_PASSWORD` set through Render's secret environment-variable settings to a unique password of at least 20 characters
 - `CHATTER_ICE_SERVERS` with your production STUN/TURN configuration; TURN is needed for reliable calls across restrictive networks
 - `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for verified registration and welcome emails
@@ -80,4 +81,4 @@ Configure these Render environment variables:
 
 Chatter stores data in Supabase PostgreSQL; it does not need a Render disk for the database. Existing SQLite data is not automatically imported—this Supabase setup starts fresh. Never add production secrets to GitHub or browser code.
 
-The Supabase schema enables row-level security and defines no public access policies. The app connects from its Node.js server using `SUPABASE_DB_URL`; do not put a Supabase service-role key or database password in frontend code. Configure database backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access. Render serves the Node.js app at its own URL; the GitHub Pages link is not the live backend.
+The Supabase schema enables row-level security and defines no public table access policies. The app uses `SUPABASE_SERVICE_ROLE_KEY` only from its Node.js server; never put it in frontend code, GitHub, or a public environment variable. Configure database backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access. Render serves the Node.js app at its own URL; the GitHub Pages link is not the live backend.

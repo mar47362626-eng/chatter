@@ -3,13 +3,35 @@ const { promisify } = require("node:util");
 const { createServer } = require("node:http");
 const { existsSync, readFileSync, statSync } = require("node:fs");
 const { extname, join, normalize } = require("node:path");
-const { Pool } = require("pg");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
-const databaseUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("Set SUPABASE_DB_URL to your Supabase PostgreSQL connection string.");
-const pool = new Pool({ connectionString: databaseUrl, max: 5, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 10_000 });
+const supabaseProjectId = process.env.SUPABASE_PROJECT_ID;
+const supabaseUrl = process.env.SUPABASE_URL || (supabaseProjectId ? `https://${supabaseProjectId}.supabase.co` : "");
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  throw new Error("Set SUPABASE_PROJECT_ID and SUPABASE_SERVICE_ROLE_KEY for the server-side Supabase API.");
+}
+if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl)) {
+  throw new Error("SUPABASE_URL must be a Supabase HTTPS project URL.");
+}
+async function callSupabaseRpc(functionName, body) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const error = new Error(`Supabase RPC ${functionName} failed with HTTP ${response.status}.`);
+    if (response.status === 409) error.code = "23505";
+    throw error;
+  }
+  return response.json();
+}
 function postgresSql(sql) {
   let parameterIndex = 0;
   return sql
@@ -24,46 +46,35 @@ const database = {
     const text = postgresSql(sql);
     return {
       async get(...values) {
-        const result = await pool.query(text, values);
+        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
         return result.rows[0];
       },
       async all(...values) {
-        const result = await pool.query(text, values);
+        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
         return result.rows;
       },
       async run(...values) {
-        const result = await pool.query(text, values);
+        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
         return { changes: result.rowCount };
       }
     };
   },
   async transaction(callback) {
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const transactionDatabase = {
-        prepare(sql) {
-          const text = postgresSql(sql);
-          return {
-            async run(...values) {
-              const result = await client.query(text, values);
-              return { changes: result.rowCount };
-            }
-          };
-        }
-      };
-      const result = await callback(transactionDatabase);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-    }
-  },
-  async close() {
-    await pool.end();
+    const statements = [];
+    const transactionDatabase = {
+      prepare(sql) {
+        const text = postgresSql(sql);
+        return {
+          async run(...values) {
+            statements.push({ statement: text, parameters: values });
+            return { changes: 1 };
+          }
+        };
+      }
+    };
+    const result = await callback(transactionDatabase);
+    if (statements.length) await callSupabaseRpc("chatter_batch", { statements });
+    return result;
   }
 };
 const secureCookieAttribute = process.env.NODE_ENV === "production" ? "; Secure" : "";
@@ -775,14 +786,14 @@ async function handleApi(request, response, url) {
 
   if (route === "GET /api/moderation/system") {
     await requireModerator(request, response);
-    const databaseStats = await database.prepare("SELECT pg_database_size(current_database()) AS bytes, (SELECT MAX(created_at) FROM user_activity) AS updated_at").get();
+    const databaseStats = await database.prepare("SELECT MAX(created_at) AS updated_at FROM user_activity").get();
     const activeSessions = Number((await database.prepare("SELECT COUNT(*) AS count FROM sessions WHERE expires_at >= ?").get(Date.now())).count);
     const openReports = Number((await database.prepare("SELECT COUNT(*) AS count FROM message_reports WHERE status = 'open'").get()).count);
     return respond(response, 200, {
       status: "running",
       nodeVersion: process.version,
       uptimeSeconds: Math.floor(process.uptime()),
-      databaseBytes: Number(databaseStats.bytes),
+      databaseBytes: null,
       databaseUpdatedAt: databaseStats.updated_at || new Date().toISOString(),
       activeSessions,
       openReports
@@ -1214,9 +1225,9 @@ const server = createServer(async (request, response) => {
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "127.0.0.1";
 async function startServer() {
-  await pool.query("SELECT 1 FROM public.users LIMIT 0");
-  await pool.query("DELETE FROM public.sessions WHERE expires_at < $1", [Date.now()]);
-  await pool.query("DELETE FROM public.pending_registrations WHERE expires_at < $1", [Date.now()]);
+  await database.prepare("SELECT id FROM users LIMIT 0").all();
+  await database.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+  await database.prepare("DELETE FROM pending_registrations WHERE expires_at < ?").run(Date.now());
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, host, resolve);
@@ -1224,18 +1235,14 @@ async function startServer() {
   console.log(`Chatter is running at http://localhost:${port}`);
 }
 
-startServer().catch(async (error) => {
-  console.error("Could not start Chatter with Supabase. Check SUPABASE_DB_URL and run supabase-schema.sql in the Supabase SQL Editor.", error);
-  await pool.end();
+startServer().catch((error) => {
+  console.error("Could not start Chatter with Supabase. Check SUPABASE_PROJECT_ID, SUPABASE_SERVICE_ROLE_KEY, and run supabase-schema.sql in the Supabase SQL Editor.", error);
   process.exitCode = 1;
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     for (const streams of eventStreams.values()) for (const stream of streams) stream.end();
-    server.close(async () => {
-      await database.close();
-      process.exit(0);
-    });
+    server.close(() => process.exit(0));
   });
 }

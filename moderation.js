@@ -193,7 +193,7 @@ function renderSystem(system) {
     ["Service", system.status],
     ["Node.js", system.nodeVersion],
     ["Uptime", `${Math.floor(system.uptimeSeconds / 3600)}h ${Math.floor((system.uptimeSeconds % 3600) / 60)}m`],
-    ["Database size", `${(system.databaseBytes / (1024 * 1024)).toFixed(2)} MB`],
+    ["Database size", system.databaseBytes === null ? "Managed by Supabase" : `${(system.databaseBytes / (1024 * 1024)).toFixed(2)} MB`],
     ["Database last updated", formatDate(system.databaseUpdatedAt)],
     ["Active sessions", system.activeSessions],
     ["Open reports", system.openReports]
