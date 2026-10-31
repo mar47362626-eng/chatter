@@ -184,7 +184,10 @@ declare
   result_rows jsonb;
   affected_rows integer;
 begin
-  if current_setting('request.jwt.claim.role', true) is distinct from 'service_role' then
+  if coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+  ) is distinct from 'service_role' then
     raise exception 'Chatter database API requires the server service role';
   end if;
   rendered := public.chatter_render_statement(p_statement, p_parameters);
@@ -210,7 +213,10 @@ declare
   affected_rows integer;
   total_affected integer := 0;
 begin
-  if current_setting('request.jwt.claim.role', true) is distinct from 'service_role' then
+  if coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+  ) is distinct from 'service_role' then
     raise exception 'Chatter database API requires the server service role';
   end if;
   if jsonb_typeof(p_statements) <> 'array' then
