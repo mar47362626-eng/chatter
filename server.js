@@ -26,7 +26,17 @@ async function callSupabaseRpc(functionName, body) {
     body: JSON.stringify(body)
   });
   if (!response.ok) {
-    const error = new Error(`Supabase RPC ${functionName} failed with HTTP ${response.status}.`);
+    const responseText = await response.text();
+    let responseError;
+    try {
+      const payload = JSON.parse(responseText);
+      responseError = [payload.code, payload.message, payload.hint].filter(Boolean).join(": ");
+    } catch {
+      responseError = "";
+    }
+    const error = new Error(
+      `Supabase RPC ${functionName} failed with HTTP ${response.status}${responseError ? `: ${responseError}` : "."}`
+    );
     if (response.status === 409) error.code = "23505";
     throw error;
   }
