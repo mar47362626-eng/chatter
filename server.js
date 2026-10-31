@@ -46,15 +46,15 @@ const database = {
     const text = postgresSql(sql);
     return {
       async get(...values) {
-        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
+        const result = await callSupabaseRpc("chatter_query", { p_statement: text, p_parameters: values });
         return result.rows[0];
       },
       async all(...values) {
-        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
+        const result = await callSupabaseRpc("chatter_query", { p_statement: text, p_parameters: values });
         return result.rows;
       },
       async run(...values) {
-        const result = await callSupabaseRpc("chatter_query", { statement: text, parameters: values });
+        const result = await callSupabaseRpc("chatter_query", { p_statement: text, p_parameters: values });
         return { changes: result.rowCount };
       }
     };
@@ -73,7 +73,7 @@ const database = {
       }
     };
     const result = await callback(transactionDatabase);
-    if (statements.length) await callSupabaseRpc("chatter_batch", { statements });
+    if (statements.length) await callSupabaseRpc("chatter_batch", { p_statements: statements });
     return result;
   }
 };
