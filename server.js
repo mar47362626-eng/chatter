@@ -456,7 +456,7 @@ function nextMonthlyPaymentDate(value) {
 async function applyInitialNumberPayment(reference, payment) {
   const order = await database.prepare(`
     SELECT ns.id, ns.user_id, ns.number_id, ns.status, u.email, n.phone, n.status AS number_status,
-      n.assigned_user_id
+      n.assigned_user_id, n.reserved_user_id
     FROM number_subscriptions ns
     JOIN users u ON u.id = ns.user_id
     JOIN foreign_numbers n ON n.id = ns.number_id
@@ -464,7 +464,7 @@ async function applyInitialNumberPayment(reference, payment) {
   `).get(reference);
   if (!order) throw new HttpError(404, "Number subscription checkout was not found.");
   if (order.status === "active") return order.user_id;
-  if (!["pending", "expired"].includes(order.status)) throw new HttpError(409, "This number checkout is no longer active.");
+  if (!["pending", "pending_approval", "expired"].includes(order.status)) throw new HttpError(409, "This number checkout is no longer active.");
   if (order.status === "expired" && order.number_status !== "available") {
     throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
   }
@@ -480,38 +480,61 @@ async function applyInitialNumberPayment(reference, payment) {
   if (order.number_status === "assigned" && order.assigned_user_id !== order.user_id) {
     throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
   }
+  if (order.number_status === "reserved" && order.reserved_user_id && order.reserved_user_id !== order.user_id) {
+    throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
+  }
   const subscription = payment.subscription || {};
   const subscriptionCode = subscription.subscription_code || payment.subscription_code || null;
   const emailToken = subscription.email_token || payment.email_token || null;
-  if (order.number_status !== "assigned") {
-    const assigned = await database.prepare(`
-      UPDATE foreign_numbers
-      SET status = 'assigned', assigned_user_id = ?, reserved_until = NULL
-      WHERE id = ? AND status IN ('available', 'reserved')
-    `).run(order.user_id, order.number_id);
-    if (!assigned.changes) {
-      const currentAssignment = await database.prepare(`
-        SELECT assigned_user_id FROM foreign_numbers WHERE id = ? AND status = 'assigned'
-      `).get(order.number_id);
-      if (currentAssignment?.assigned_user_id !== order.user_id) {
-        throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
-      }
-    }
-  }
   const nextPaymentAt = nextMonthlyPaymentDate(subscription.next_payment_date);
-  await database.prepare(`
-    UPDATE number_subscriptions
-    SET status = 'active',
-      paystack_subscription_code = COALESCE(?, paystack_subscription_code),
-      paystack_email_token = COALESCE(?, paystack_email_token),
-      next_payment_at = ?, updated_at = now()
-    WHERE id = ? AND status IN ('pending', 'expired')
-  `).run(subscriptionCode, emailToken, nextPaymentAt, order.id);
-  await database.prepare(`
-    INSERT INTO number_subscription_payments (reference, subscription_id, amount, currency, status, paid_at)
-    VALUES (?, ?, ?, ?, 'success', now())
-    ON CONFLICT(reference) DO NOTHING
-  `).run(reference, order.id, numberSubscriptionAmount, numberSubscriptionCurrency);
+  if (order.number_status === "assigned") {
+    throw new HttpError(409, "This paid request is not in a reservable state. Contact support.");
+  }
+  await database.transaction(async (transaction) => {
+    await transaction.prepare(`
+      UPDATE foreign_numbers
+      SET status = 'reserved', assigned_user_id = NULL, reserved_user_id = ?, reserved_until = NULL
+      WHERE id = ? AND status IN ('available', 'reserved')
+        AND (reserved_user_id IS NULL OR reserved_user_id = ?)
+    `).run(order.user_id, order.number_id, order.user_id);
+    await transaction.prepare(`
+      UPDATE number_subscriptions
+      SET status = 'pending_approval',
+        paystack_subscription_code = COALESCE(?, paystack_subscription_code),
+        paystack_email_token = COALESCE(?, paystack_email_token),
+        next_payment_at = ?, updated_at = now()
+      WHERE id = ? AND status IN ('pending', 'pending_approval', 'expired')
+        AND EXISTS (
+          SELECT 1 FROM foreign_numbers
+          WHERE id = ? AND status = 'reserved' AND reserved_user_id = ?
+        )
+    `).run(subscriptionCode, emailToken, nextPaymentAt, order.id, order.number_id, order.user_id);
+    await transaction.prepare(`
+      INSERT INTO number_subscription_payments (reference, subscription_id, amount, currency, status, paid_at)
+      SELECT ?, ?, ?, ?, 'success', now()
+      WHERE EXISTS (
+        SELECT 1 FROM number_subscriptions ns
+        JOIN foreign_numbers n ON n.id = ns.number_id
+        WHERE ns.id = ? AND ns.status = 'pending_approval'
+          AND n.status = 'reserved' AND n.reserved_user_id = ns.user_id
+      )
+      ON CONFLICT(reference) DO NOTHING
+    `).run(reference, order.id, numberSubscriptionAmount, numberSubscriptionCurrency, order.id);
+  });
+  const saved = await database.prepare(`
+    SELECT ns.status, n.status AS "numberStatus", n.reserved_user_id AS "reservedUserId",
+      EXISTS (
+        SELECT 1 FROM number_subscription_payments p
+        WHERE p.subscription_id = ns.id AND p.reference = ns.reference AND p.status = 'success'
+      ) AS "paymentRecorded"
+    FROM number_subscriptions ns
+    JOIN foreign_numbers n ON n.id = ns.number_id
+    WHERE ns.id = ?
+  `).get(order.id);
+  if (saved?.status !== "pending_approval" || saved.numberStatus !== "reserved"
+    || saved.reservedUserId !== order.user_id || !saved.paymentRecorded) {
+    throw new HttpError(409, "Payment was received but the number could not be reserved. Contact support.");
+  }
   await sendUserChatUpdates(order.user_id);
   return order.user_id;
 }
@@ -520,7 +543,8 @@ async function applyRecurringNumberPayment(payment) {
   const subscriptionCode = payment.subscription?.subscription_code || payment.subscription_code;
   if (!subscriptionCode) throw new HttpError(400, "Paystack renewal event does not include its subscription code.");
   const subscription = await database.prepare(`
-    SELECT ns.id, ns.user_id, ns.number_id, ns.status, ns.next_payment_at, u.email, n.assigned_user_id
+    SELECT ns.id, ns.user_id, ns.number_id, ns.status, ns.next_payment_at, u.email,
+      n.assigned_user_id, n.reserved_user_id, n.status AS number_status
     FROM number_subscriptions ns
     JOIN users u ON u.id = ns.user_id
     JOIN foreign_numbers n ON n.id = ns.number_id
@@ -535,7 +559,11 @@ async function applyRecurringNumberPayment(payment) {
   ) {
     throw new HttpError(400, "Paystack renewal does not match the account's 10,000 NGN subscription.");
   }
-  if (subscription.assigned_user_id !== subscription.user_id) {
+  const isPendingApproval = subscription.status === "pending_approval";
+  const isRejected = subscription.status === "rejected";
+  if (!isRejected && (isPendingApproval
+    ? subscription.number_status !== "reserved" || subscription.reserved_user_id !== subscription.user_id
+    : subscription.assigned_user_id !== subscription.user_id)) {
     throw new HttpError(409, "The subscribed number is no longer assigned to its customer.");
   }
   const recorded = await database.prepare(`
@@ -544,10 +572,12 @@ async function applyRecurringNumberPayment(payment) {
     ON CONFLICT(reference) DO NOTHING
   `).run(payment.reference, subscription.id, numberSubscriptionAmount, numberSubscriptionCurrency);
   if (!recorded.changes) return;
+  if (isRejected) return;
   const nextPaymentAt = nextMonthlyPaymentDate(payment.subscription?.next_payment_date);
   await database.prepare(`
     UPDATE number_subscriptions
-    SET status = 'active', next_payment_at = ?, updated_at = now()
+    SET status = CASE WHEN status = 'pending_approval' THEN 'pending_approval' ELSE 'active' END,
+      next_payment_at = ?, updated_at = now()
     WHERE id = ?
   `).run(nextPaymentAt, subscription.id);
   await sendUserChatUpdates(subscription.user_id);
@@ -918,7 +948,7 @@ async function handleApi(request, response, url) {
         const row = await database.prepare(`
           SELECT ns.id, ns.user_id
           FROM number_subscriptions ns JOIN users u ON u.id = ns.user_id
-          WHERE lower(u.email) = ? AND ns.status IN ('pending', 'active')
+          WHERE lower(u.email) = ? AND ns.status IN ('pending', 'pending_approval', 'active')
             AND ns.paystack_subscription_code IS NULL
           ORDER BY ns.created_at DESC LIMIT 1
         `).get(email);
@@ -937,8 +967,11 @@ async function handleApi(request, response, url) {
         const row = await database.prepare("SELECT user_id FROM number_subscriptions WHERE paystack_subscription_code = ?").get(subscriptionCode);
         if (row) {
           await database.prepare(`
-            UPDATE number_subscriptions SET status = 'past_due', updated_at = now()
+            UPDATE number_subscriptions
+            SET status = CASE WHEN status = 'pending_approval' THEN 'pending_approval' ELSE 'past_due' END,
+              updated_at = now()
             WHERE paystack_subscription_code = ?
+              AND status IN ('pending_approval', 'active', 'past_due')
           `).run(subscriptionCode);
           await sendUserChatUpdates(row.user_id);
         }
@@ -956,11 +989,19 @@ async function handleApi(request, response, url) {
       const subscriptionCode = payment.subscription_code || payment.code;
       if (subscriptionCode) {
         const row = await database.prepare(`
-          SELECT id, user_id, number_id, next_payment_at
+          SELECT id, user_id, number_id, next_payment_at, status
           FROM number_subscriptions WHERE paystack_subscription_code = ?
         `).get(subscriptionCode);
         if (row) {
-          if (row.next_payment_at && new Date(row.next_payment_at).getTime() > Date.now()) {
+          if (row.status === "rejected") {
+            return respond(response, 200, { ok: true });
+          }
+          if (row.status === "pending_approval") {
+            await database.prepare(`
+              UPDATE number_subscriptions SET cancel_at_period_end = true, updated_at = now()
+              WHERE id = ? AND status = 'pending_approval'
+            `).run(row.id);
+          } else if (row.next_payment_at && new Date(row.next_payment_at).getTime() > Date.now()) {
             await database.prepare(`
               UPDATE number_subscriptions SET cancel_at_period_end = true, updated_at = now()
               WHERE id = ?
@@ -970,9 +1011,10 @@ async function handleApi(request, response, url) {
               UPDATE number_subscriptions SET status = 'ended', updated_at = now() WHERE id = ?
             `).run(row.id);
             await database.prepare(`
-              UPDATE foreign_numbers SET status = 'available', assigned_user_id = NULL
-              WHERE id = ? AND assigned_user_id = ?
-            `).run(row.number_id, row.user_id);
+              UPDATE foreign_numbers
+              SET status = 'available', assigned_user_id = NULL, reserved_user_id = NULL, reserved_until = NULL
+              WHERE id = ? AND (assigned_user_id = ? OR reserved_user_id = ?)
+            `).run(row.number_id, row.user_id, row.user_id);
             await sendUserChatUpdates(row.user_id);
           }
         }
@@ -1131,10 +1173,10 @@ async function handleApi(request, response, url) {
         u.name AS "assignedUserName", u.email AS "assignedUserEmail",
         ns.status AS "subscriptionStatus", ns.next_payment_at AS "nextPaymentAt"
       FROM foreign_numbers n
-      LEFT JOIN users u ON u.id = n.assigned_user_id
+      LEFT JOIN users u ON u.id = COALESCE(n.reserved_user_id, n.assigned_user_id)
       LEFT JOIN number_subscriptions ns
-        ON ns.number_id = n.id AND ns.user_id = n.assigned_user_id
-        AND ns.status IN ('active', 'past_due')
+        ON ns.number_id = n.id AND ns.user_id = COALESCE(n.reserved_user_id, n.assigned_user_id)
+        AND ns.status IN ('pending_approval', 'active', 'past_due')
       ORDER BY n.created_at DESC
     `).all();
     return respond(response, 200, {
@@ -1173,6 +1215,96 @@ async function handleApi(request, response, url) {
     }
     await recordAdminAccess("number_added", id);
     return respond(response, 201, { number: { id, phone, country, status: "available" } });
+  }
+
+  const moderationNumberActionRoute = url.pathname.match(/^\/api\/moderation\/numbers\/([a-f0-9]{32})\/(approve|reject)$/);
+  if (moderationNumberActionRoute && request.method === "POST") {
+    await requireModerator(request, response);
+    const [, numberId, action] = moderationNumberActionRoute;
+    const input = await readJson(request);
+    const requestRow = await database.prepare(`
+      SELECT ns.id, ns.user_id, ns.status, ns.paystack_subscription_code AS "subscriptionCode",
+        ns.paystack_email_token AS "emailToken", ns.next_payment_at AS "nextPaymentAt",
+        n.reserved_user_id AS "reservedUserId",
+        EXISTS (
+          SELECT 1 FROM number_subscription_payments p
+          WHERE p.subscription_id = ns.id AND p.status = 'success'
+        ) AS "hasSuccessfulPayment"
+      FROM number_subscriptions ns
+      JOIN foreign_numbers n ON n.id = ns.number_id
+      WHERE n.id = ? AND n.status = 'reserved'
+        AND ns.number_id = n.id AND ns.user_id = n.reserved_user_id
+      ORDER BY ns.created_at DESC LIMIT 1
+    `).get(numberId);
+    if (!requestRow || requestRow.status !== "pending_approval" || !requestRow.hasSuccessfulPayment) {
+      throw new HttpError(409, "This number has no paid request awaiting approval.");
+    }
+    if (requestRow.reservedUserId !== requestRow.user_id) {
+      throw new HttpError(409, "The number reservation no longer matches its customer.");
+    }
+
+    if (action === "approve") {
+      if (!requestRow.subscriptionCode || !requestRow.emailToken) {
+        throw new HttpError(409, "Paystack is still setting up recurring billing. Refresh and try again shortly.");
+      }
+      const paidThrough = new Date(requestRow.nextPaymentAt).getTime();
+      if (!Number.isFinite(paidThrough) || paidThrough <= Date.now()) {
+        throw new HttpError(409, "This request's paid period has ended. Resolve the request with the customer before approving it.");
+      }
+      await database.transaction(async (transaction) => {
+        await transaction.prepare(`
+          UPDATE foreign_numbers
+          SET status = 'assigned', assigned_user_id = reserved_user_id,
+            reserved_user_id = NULL, reserved_until = NULL
+          WHERE id = ? AND status = 'reserved' AND reserved_user_id = ?
+        `).run(numberId, requestRow.user_id);
+        await transaction.prepare(`
+          UPDATE number_subscriptions
+          SET status = 'active', updated_at = now()
+          WHERE id = ? AND status = 'pending_approval'
+            AND EXISTS (
+              SELECT 1 FROM foreign_numbers
+              WHERE id = ? AND status = 'assigned' AND assigned_user_id = ?
+            )
+        `).run(requestRow.id, numberId, requestRow.user_id);
+      });
+      const approved = await database.prepare("SELECT status FROM number_subscriptions WHERE id = ?").get(requestRow.id);
+      if (approved?.status !== "active") throw new HttpError(409, "The number request changed before it could be approved. Refresh and try again.");
+      await recordAdminAccess("number_request_approved");
+      await sendUserChatUpdates(requestRow.user_id);
+      return respond(response, 200, { ok: true, status: "active" });
+    }
+
+    if (input.refundConfirmed !== true) {
+      throw new HttpError(400, "Issue the customer's refund in Paystack first, then confirm it here.");
+    }
+    if (!requestRow.subscriptionCode || !requestRow.emailToken) {
+      throw new HttpError(409, "Paystack is still setting up recurring billing. Refresh and try again shortly.");
+    }
+    await callPaystack("/subscription/disable", {
+      method: "POST",
+      body: JSON.stringify({
+        code: requestRow.subscriptionCode,
+        token: requestRow.emailToken
+      })
+    });
+    await database.transaction(async (transaction) => {
+      await transaction.prepare(`
+        UPDATE number_subscriptions
+        SET status = 'rejected', updated_at = now()
+        WHERE id = ? AND status = 'pending_approval'
+      `).run(requestRow.id);
+      await transaction.prepare(`
+        UPDATE foreign_numbers
+        SET status = 'available', reserved_user_id = NULL, reserved_until = NULL
+        WHERE id = ? AND status = 'reserved' AND reserved_user_id = ?
+      `).run(numberId, requestRow.user_id);
+    });
+    const rejected = await database.prepare("SELECT status FROM number_subscriptions WHERE id = ?").get(requestRow.id);
+    if (rejected?.status !== "rejected") throw new HttpError(409, "The number request changed before it could be rejected. Check its current status.");
+    await recordAdminAccess("number_request_rejected");
+    await sendUserChatUpdates(requestRow.user_id);
+    return respond(response, 200, { ok: true, status: "rejected" });
   }
 
   const moderationNumberRoute = url.pathname.match(/^\/api\/moderation\/numbers\/([a-f0-9]{32})$/);
@@ -1422,7 +1554,7 @@ async function handleApi(request, response, url) {
   if (route === "GET /api/numbers") {
     await database.prepare(`
       UPDATE foreign_numbers
-      SET status = 'available', reserved_until = NULL
+      SET status = 'available', reserved_user_id = NULL, reserved_until = NULL
       WHERE status = 'reserved' AND reserved_until <= now()
     `).run();
     await database.prepare(`
@@ -1433,18 +1565,23 @@ async function handleApi(request, response, url) {
       SELECT id, user_id, number_id, cancel_at_period_end AS "cancelAtPeriodEnd"
       FROM number_subscriptions
       WHERE next_payment_at <= now()
-        AND (status = 'active' OR (status = 'past_due' AND cancel_at_period_end = true))
+        AND (
+          status = 'active'
+          OR (status IN ('past_due', 'pending_approval') AND cancel_at_period_end = true)
+        )
     `).all();
     for (const expired of expiredSubscriptions) {
       const nextStatus = expired.cancelAtPeriodEnd ? "cancelled" : "past_due";
       await database.prepare(`
-        UPDATE number_subscriptions SET status = ?, updated_at = now() WHERE id = ? AND status = 'active'
+        UPDATE number_subscriptions SET status = ?, updated_at = now()
+        WHERE id = ? AND status IN ('active', 'past_due', 'pending_approval')
       `).run(nextStatus, expired.id);
       if (expired.cancelAtPeriodEnd) {
         await database.prepare(`
-          UPDATE foreign_numbers SET status = 'available', assigned_user_id = NULL
-          WHERE id = ? AND assigned_user_id = ?
-        `).run(expired.number_id, expired.user_id);
+          UPDATE foreign_numbers
+          SET status = 'available', assigned_user_id = NULL, reserved_user_id = NULL, reserved_until = NULL
+          WHERE id = ? AND (assigned_user_id = ? OR reserved_user_id = ?)
+        `).run(expired.number_id, expired.user_id, expired.user_id);
       }
       await sendUserChatUpdates(expired.user_id);
     }
@@ -1457,14 +1594,22 @@ async function handleApi(request, response, url) {
         ns.next_payment_at AS "nextPaymentAt", n.phone, n.country
       FROM number_subscriptions ns
       JOIN foreign_numbers n ON n.id = ns.number_id
-      WHERE ns.user_id = ? AND ns.status IN ('active', 'past_due')
+      WHERE ns.user_id = ? AND ns.status IN ('pending_approval', 'active', 'past_due')
       ORDER BY ns.created_at DESC LIMIT 1
+    `).get(session.userId);
+    const rejectedRequest = subscription ? null : await database.prepare(`
+      SELECT n.phone, n.country
+      FROM number_subscriptions ns
+      JOIN foreign_numbers n ON n.id = ns.number_id
+      WHERE ns.user_id = ? AND ns.status = 'rejected'
+      ORDER BY ns.updated_at DESC LIMIT 1
     `).get(session.userId);
     const checkoutEnabled = /^sk_live_[A-Za-z0-9]+$/.test(process.env.PAYSTACK_SECRET_KEY || "")
       && /^PLN_[A-Za-z0-9]+$/.test(process.env.PAYSTACK_PLAN_CODE || "");
     return respond(response, 200, {
       numbers,
       subscription: subscription || null,
+      rejectedRequest: rejectedRequest || null,
       price: numberSubscriptionAmount,
       currency: numberSubscriptionCurrency,
       checkoutEnabled
@@ -1479,7 +1624,7 @@ async function handleApi(request, response, url) {
     if (!user?.email) throw new HttpError(401, "Please log in to continue.");
     const existing = await database.prepare(`
       SELECT id FROM number_subscriptions
-      WHERE user_id = ? AND status IN ('pending', 'active', 'past_due')
+      WHERE user_id = ? AND status IN ('pending', 'pending_approval', 'active', 'past_due')
         AND (status != 'active' OR next_payment_at IS NULL OR next_payment_at > now())
       LIMIT 1
     `).get(session.userId);
@@ -1535,7 +1680,7 @@ async function handleApi(request, response, url) {
         `).run(subscriptionId);
         await database.prepare(`
           UPDATE foreign_numbers SET status = 'available', reserved_until = NULL
-          WHERE id = ? AND status = 'reserved'
+          WHERE id = ? AND status = 'reserved' AND reserved_user_id IS NULL
         `).run(numberId);
       } catch (releaseError) {
         console.error("Could not release a failed number checkout reservation:", releaseError.message);
@@ -1555,20 +1700,22 @@ async function handleApi(request, response, url) {
       WHERE reference = ? AND user_id = ?
     `).get(reference, session.userId);
     if (!transaction) throw new HttpError(404, "Number subscription checkout was not found.");
-    if (transaction.status === "active") return respond(response, 200, { verified: true });
+    if (transaction.status === "active") return respond(response, 200, { verified: true, approved: true });
+    if (transaction.status === "pending_approval") return respond(response, 200, { verified: true, approved: false });
     const payment = await callPaystack(`/transaction/verify/${encodeURIComponent(reference)}`);
     await applyInitialNumberPayment(reference, payment);
-    return respond(response, 200, { verified: true });
+    return respond(response, 200, { verified: true, approved: false });
   }
 
   if (route === "POST /api/numbers/cancel") {
     const subscription = await database.prepare(`
       SELECT id, paystack_subscription_code, paystack_email_token
       FROM number_subscriptions
-      WHERE user_id = ? AND status IN ('active', 'past_due') AND cancel_at_period_end = false
+      WHERE user_id = ? AND status IN ('pending_approval', 'active', 'past_due')
+        AND cancel_at_period_end = false
       ORDER BY created_at DESC LIMIT 1
     `).get(session.userId);
-    if (!subscription) throw new HttpError(404, "No active number subscription needs cancellation.");
+    if (!subscription) throw new HttpError(404, "No number subscription needs cancellation.");
     if (!subscription.paystack_subscription_code || !subscription.paystack_email_token) {
       throw new HttpError(409, "Paystack is still setting up recurring billing. Try again shortly.");
     }

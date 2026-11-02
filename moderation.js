@@ -322,15 +322,24 @@ async function loadNumbers() {
     : "";
   updateInventoryPhoneLimit();
   document.querySelector("#numberInventoryList").innerHTML = renderTable(
-    ["Country", "Number", "Status", "Assigned customer", "Next payment", "Action"],
+    ["Country", "Number", "Status", "Customer", "Next payment", "Action"],
     result.numbers.map((number) => `
       <tr>
         <td>${escapeHtml(number.country)}</td>
         <td>${escapeHtml(number.phone)}</td>
-        <td>${escapeHtml(number.subscriptionStatus === "past_due" ? "Payment overdue" : number.status)}</td>
+        <td>${escapeHtml(number.subscriptionStatus === "pending_approval"
+          ? "Paid · awaiting approval"
+          : number.subscriptionStatus === "past_due"
+            ? "Payment overdue"
+            : number.status === "reserved" ? "Checkout in progress" : number.status)}</td>
         <td>${escapeHtml(number.assignedUserName || number.assignedUserEmail || "—")}${number.assignedUserName && number.assignedUserEmail ? `<small class="table-subtext">${escapeHtml(number.assignedUserEmail)}</small>` : ""}</td>
-        <td>${escapeHtml(formatDate(number.nextPaymentAt))}</td>
-        <td>${number.status === "available" ? `<button class="secondary-button" type="button" data-delete-number="${escapeHtml(number.id)}">Remove</button>` : "—"}</td>
+        <td>${escapeHtml(number.nextPaymentAt ? formatDate(number.nextPaymentAt) : "Being confirmed")}</td>
+        <td>${number.subscriptionStatus === "pending_approval" ? `
+          <div class="number-request-actions">
+            <button type="button" data-number-action="approve" data-number-id="${escapeHtml(number.id)}">Approve</button>
+            <button class="secondary-button number-reject-button" type="button" data-number-action="reject" data-number-id="${escapeHtml(number.id)}">Reject</button>
+          </div>
+        ` : number.status === "available" ? `<button class="secondary-button" type="button" data-delete-number="${escapeHtml(number.id)}">Remove</button>` : "—"}</td>
       </tr>
     `),
     "No numbers have been added to the inventory."
@@ -464,6 +473,27 @@ document.querySelector("#inventoryCountry").addEventListener("change", async () 
   updateInventoryPhoneLimit();
 });
 document.querySelector("#numberInventoryList").addEventListener("click", async (event) => {
+  const actionButton = event.target.closest("[data-number-action]");
+  if (actionButton) {
+    const action = actionButton.dataset.numberAction;
+    if (action === "reject" && !window.confirm("Refund this customer in Paystack before continuing. This will stop future charges and release the number. Have you already issued the refund?")) return;
+    if (action === "approve" && !window.confirm("Approve this paid request? The number will become active for this customer in Chatter.")) return;
+    const error = document.querySelector("#numberInventoryError");
+    error.textContent = "";
+    const actionButtons = actionButton.closest(".number-request-actions").querySelectorAll("button");
+    actionButtons.forEach((button) => { button.disabled = true; });
+    try {
+      await api(`/api/moderation/numbers/${actionButton.dataset.numberId}/${action}`, {
+        method: "POST",
+        body: JSON.stringify(action === "reject" ? { refundConfirmed: true } : {})
+      });
+      await loadNumbers();
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      actionButtons.forEach((button) => { button.disabled = false; });
+    }
+    return;
+  }
   const button = event.target.closest("[data-delete-number]");
   if (!button) return;
   const error = document.querySelector("#numberInventoryError");

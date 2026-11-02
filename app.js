@@ -1312,25 +1312,41 @@ async function loadForeignNumberStore() {
   }
   const subscription = result.subscription;
   if (subscription) {
+    const awaitingApproval = subscription.status === "pending_approval";
     const nextPayment = subscription.nextPaymentAt
       ? new Date(subscription.nextPaymentAt).toLocaleDateString()
       : "being confirmed";
     details.innerHTML = `
-      <div class="number-subscription-card ${subscription.status === "active" ? "is-active" : "is-attention"}">
+      <div class="number-subscription-card ${subscription.status === "active" ? "is-active" : "is-attention"} ${awaitingApproval ? "is-pending-approval" : ""}">
         <div class="number-subscription-topline">
-          <span class="number-subscription-label">YOUR CHATTER NUMBER</span>
-          <span class="number-status-pill">${escapeHtml(subscription.status === "active" ? "Active" : "Payment due")}</span>
+          <span class="number-subscription-label">${awaitingApproval ? "PAYMENT RECEIVED · REVIEW IN PROGRESS" : "YOUR CHATTER NUMBER"}</span>
+          <span class="number-status-pill">${escapeHtml(awaitingApproval ? "Awaiting approval" : subscription.status === "active" ? "Active" : "Payment due")}</span>
         </div>
         <strong>${escapeHtml(subscription.phone)}</strong>
-        <span>${escapeHtml(subscription.country)}${subscription.status === "active" ? ` · Renews ${escapeHtml(nextPayment)}` : " · Update your payment to keep this number active"}</span>
-        ${subscription.cancelAtPeriodEnd ? `<span class="number-cancel-note">Renewal cancelled · number remains active until ${escapeHtml(nextPayment)}</span>` : ""}
+        <span>${escapeHtml(subscription.country)}${awaitingApproval
+          ? " · Reserved exclusively for your account; it is not active until approved"
+          : subscription.status === "active"
+            ? ` · Renews ${escapeHtml(nextPayment)}`
+            : " · Update your payment to keep this number active"}</span>
+        ${subscription.cancelAtPeriodEnd ? `<span class="number-cancel-note">Renewal cancelled · ${awaitingApproval ? "reservation remains held" : "number remains active"} until ${escapeHtml(nextPayment)}</span>` : ""}
         ${!subscription.cancelAtPeriodEnd
           ? `<button class="number-cancel-button" type="button" id="cancelNumberSubscriptionButton">Cancel renewal</button>`
           : ""}
       </div>
     `;
   } else {
-    details.innerHTML = `<p class="dialog-description">No foreign Chatter number is assigned to your account.</p>`;
+    details.innerHTML = result.rejectedRequest
+      ? `
+        <div class="number-subscription-card is-attention is-rejected">
+          <div class="number-subscription-topline">
+            <span class="number-subscription-label">PREVIOUS NUMBER REQUEST</span>
+            <span class="number-status-pill">Not approved</span>
+          </div>
+          <strong>${escapeHtml(result.rejectedRequest.phone)}</strong>
+          <span>${escapeHtml(result.rejectedRequest.country)} · Admin marked your Paystack refund as issued. Contact support if it is missing from your account.</span>
+        </div>
+      `
+      : `<p class="dialog-description">No foreign Chatter number is assigned to your account.</p>`;
   }
   if (!result.numbers.length) {
     list.innerHTML = `<div class="number-store-empty"><span aria-hidden="true">◎</span><strong>No numbers available right now</strong><small>Please check back later.</small></div>`;
@@ -1361,7 +1377,7 @@ async function loadForeignNumberStore() {
     </div>
   `;
   panel.setAttribute("aria-busy", "false");
-  if (!result.checkoutEnabled) {
+  if (!result.checkoutEnabled && !subscription) {
     status.innerHTML = `<span class="number-status-icon" aria-hidden="true">!</span><span><strong>Checkout is temporarily unavailable</strong><small>Live payment is not configured yet. Please check back later.</small></span>`;
     status.hidden = false;
   }
@@ -1386,7 +1402,8 @@ document.querySelector("#foreignNumberList").addEventListener("click", async (ev
 
 document.querySelector("#numberSubscriptionDetails").addEventListener("click", async (event) => {
   if (event.target.id !== "cancelNumberSubscriptionButton") return;
-  if (!window.confirm("Stop future monthly charges? Your number will remain assigned until the paid period ends.")) return;
+  const pendingApproval = event.target.closest(".number-subscription-card")?.classList.contains("is-pending-approval");
+  if (!window.confirm(`Stop future monthly charges? Your ${pendingApproval ? "reserved number" : "assigned number"} will remain held until the paid period ends.`)) return;
   const button = event.target;
   button.disabled = true;
   button.textContent = "Cancelling…";
@@ -1414,9 +1431,11 @@ async function verifyPaystackNumberReturn() {
       body: JSON.stringify({ reference })
     });
     if (result.verified) {
-      showToast("Payment verified. Your Chatter number is now assigned.");
+      showToast(result.approved
+        ? "Payment verified. Your Chatter number is active."
+        : "Payment received. Your number is reserved for you while it awaits admin approval.");
       await loadForeignNumberStore();
-      await refreshChats();
+      if (result.approved) await refreshChats();
     }
   } catch (error) {
     showToast(`Number payment was not verified: ${error.message}`);

@@ -117,10 +117,14 @@ create table if not exists public.foreign_numbers (
   country text not null,
   status text not null default 'available' check (status in ('available', 'reserved', 'assigned')),
   assigned_user_id text references public.users(id) on delete set null,
+  reserved_user_id text references public.users(id) on delete set null,
   reserved_until timestamptz,
   created_at timestamptz not null default now(),
   check ((status = 'assigned') = (assigned_user_id is not null))
 );
+
+alter table public.foreign_numbers
+  add column if not exists reserved_user_id text references public.users(id) on delete set null;
 
 create table if not exists public.number_subscriptions (
   id text primary key,
@@ -129,7 +133,7 @@ create table if not exists public.number_subscriptions (
   reference text not null unique,
   paystack_subscription_code text unique,
   paystack_email_token text,
-  status text not null default 'pending' check (status in ('pending', 'active', 'past_due', 'cancelled', 'ended', 'expired')),
+  status text not null default 'pending' check (status in ('pending', 'pending_approval', 'active', 'past_due', 'cancelled', 'ended', 'expired', 'rejected')),
   cancel_at_period_end boolean not null default false,
   amount integer not null check (amount = 1000000),
   currency text not null check (currency = 'NGN'),
@@ -137,6 +141,12 @@ create table if not exists public.number_subscriptions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.number_subscriptions
+  drop constraint if exists number_subscriptions_status_check;
+alter table public.number_subscriptions
+  add constraint number_subscriptions_status_check
+  check (status in ('pending', 'pending_approval', 'active', 'past_due', 'cancelled', 'ended', 'expired', 'rejected'));
 
 create table if not exists public.number_subscription_payments (
   reference text primary key,
@@ -188,10 +198,12 @@ alter table public.number_subscription_payments enable row level security;
 create index if not exists foreign_numbers_status_created on public.foreign_numbers (status, created_at);
 create index if not exists number_subscriptions_user_status on public.number_subscriptions (user_id, status);
 create index if not exists number_subscriptions_renewal on public.number_subscriptions (status, next_payment_at);
+drop index if exists public.number_subscriptions_one_current_per_user;
+drop index if exists public.number_subscriptions_one_current_per_number;
 create unique index if not exists number_subscriptions_one_current_per_user
-  on public.number_subscriptions (user_id) where status in ('pending', 'active', 'past_due');
+  on public.number_subscriptions (user_id) where status in ('pending', 'pending_approval', 'active', 'past_due');
 create unique index if not exists number_subscriptions_one_current_per_number
-  on public.number_subscriptions (number_id) where status in ('pending', 'active', 'past_due');
+  on public.number_subscriptions (number_id) where status in ('pending', 'pending_approval', 'active', 'past_due');
 
 create or replace function public.chatter_render_statement(p_statement text, p_parameters jsonb)
 returns text

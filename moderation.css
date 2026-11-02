@@ -132,3 +132,8 @@ body:has(.admin-layout:not([hidden])) { height: 100vh; overflow: hidden; }
   .admin-nav { grid-template-columns: 1fr; }
   .stat-grid, .system-grid { grid-template-columns: 1fr; }
 }
+
+.number-request-actions { display: flex; flex-wrap: wrap; gap: 6px; min-width: 180px; }
+.number-request-actions button { min-height: 32px; padding: 0 10px; font-size: 10px; }
+.number-request-actions .number-reject-button { border-color: #f0d7d4; color: #a63c3c; }
+.number-request-actions .number-reject-button:hover { border-color: #e7b9b3; background: #fff7f6; color: #8f3028; }

@@ -57,11 +57,13 @@ Use your TURN provider's actual address and credentials, keep credentials out of
 
 ## Selling foreign Chatter numbers
 
-Users register with a valid Nigerian (+234) phone number. In Settings, they can subscribe to an available foreign Chatter number for **₦10,000 per month**. Paystack handles automatic monthly recurring charges. After payment is verified, the number is assigned to that account and becomes its Chatter contact number; other Chatter users can find the customer with it. Customers can cancel future renewals in Settings. A cancelled number remains assigned through its paid period.
+Users register with a valid Nigerian (+234) phone number. In Settings, they can subscribe to an available foreign Chatter number for **₦10,000 per month**. Paystack handles automatic monthly recurring charges. After payment is verified, the number is held exclusively for that customer and shown as awaiting approval. It does not become an active Chatter contact number until a moderator approves it; only then can other Chatter users find the customer with that number. Customers can cancel future renewals in Settings. A cancelled active number remains assigned through its paid period.
+
+In the moderation console, open **Phone numbers** to review paid requests. Approving activates the number for its buyer. To reject a paid request, first issue the refund in Paystack, then use **Reject**; Chatter disables recurring billing and releases the number. The refund itself is manual and must be completed before confirming rejection.
 
 This feature does not create phone numbers or enable real calls/SMS. Add only numbers that you have lawfully obtained from a carrier. The foreign number works as a Chatter contact identifier only; external calls and SMS still require a connected telecom provider. The app’s existing calls are browser-to-browser WebRTC calls.
 
-Before deploying the new feature, run the updated `supabase-schema.sql` in the Supabase SQL Editor. It creates the private inventory, subscription, and payment tables. In the live Paystack dashboard, create a **monthly NGN plan for ₦10,000** and configure its webhook URL as:
+Before deploying the new feature, run the updated `supabase-schema.sql` in the Supabase SQL Editor. It creates or migrates the private inventory, subscription, and payment tables, including the customer-owned reservation and pending-approval status. In the live Paystack dashboard, create a **monthly NGN plan for ₦10,000** and configure its webhook URL as:
 
 ```text
 https://YOUR-RENDER-SERVICE.onrender.com/api/paystack/webhook
