@@ -11,6 +11,7 @@ const activityUserSearch = document.querySelector("#activityUserSearch");
 let activityFilterUserId = "";
 let activityOffset = 0;
 let activityTotal = 0;
+let inventoryCountries = [];
 const activityPageSize = 100;
 const adminViews = {
   overview: document.querySelector("#overviewView"),
@@ -278,8 +279,48 @@ async function loadAudit() {
   renderAudit(result.entries);
 }
 
+function updateInventoryPhoneLimit() {
+  const countrySelect = document.querySelector("#inventoryCountry");
+  const phoneInput = document.querySelector("#inventoryPhone");
+  const hint = document.querySelector("#inventoryPhoneLengthHint");
+  const country = inventoryCountries.find((item) => item.country === countrySelect.value);
+  if (!country) {
+    phoneInput.value = "";
+    phoneInput.disabled = true;
+    phoneInput.placeholder = "Select a country first";
+    phoneInput.maxLength = 15;
+    phoneInput.minLength = 0;
+    hint.textContent = "Select a country to see its calling code and number length.";
+    return;
+  }
+  const lengths = country.nationalNumberLengths;
+  const minimum = Math.min(...lengths);
+  const maximum = Math.max(...lengths);
+  phoneInput.disabled = false;
+  phoneInput.value = "";
+  phoneInput.placeholder = `e.g. number without ${country.callingCode}`;
+  phoneInput.maxLength = maximum;
+  phoneInput.minLength = minimum;
+  hint.textContent = `Country code ${country.callingCode}. Valid number lengths: ${lengths.join(", ")} digits.`;
+}
+
 async function loadNumbers() {
   const result = await api("/api/moderation/numbers");
+  inventoryCountries = result.countries;
+  const countrySelect = document.querySelector("#inventoryCountry");
+  const previousCountry = countrySelect.value;
+  countrySelect.replaceChildren(new Option("Choose a country", ""));
+  for (const country of inventoryCountries) {
+    const option = new Option(
+      `${country.name} (${country.callingCode}) · ${country.nationalNumberLengths.join(", ")} digits`,
+      country.country
+    );
+    countrySelect.add(option);
+  }
+  countrySelect.value = inventoryCountries.some((country) => country.country === previousCountry)
+    ? previousCountry
+    : "";
+  updateInventoryPhoneLimit();
   document.querySelector("#numberInventoryList").innerHTML = renderTable(
     ["Country", "Number", "Status", "Assigned customer", "Next payment", "Action"],
     result.numbers.map((number) => `
@@ -396,11 +437,17 @@ document.querySelector("#numberInventoryForm").addEventListener("submit", async 
   error.textContent = "";
   submitButton.disabled = true;
   try {
+    const country = inventoryCountries.find((item) => item.country === document.querySelector("#inventoryCountry").value);
+    if (!country) throw new Error("Choose a foreign country from the list.");
+    const digits = document.querySelector("#inventoryPhone").value.replace(/\D/g, "");
+    if (!country.nationalNumberLengths.includes(digits.length)) {
+      throw new Error(`Enter a ${country.name} number with ${country.nationalNumberLengths.join(", ")} digits, without the ${country.callingCode} country code.`);
+    }
     await api("/api/moderation/numbers", {
       method: "POST",
       body: JSON.stringify({
-        country: document.querySelector("#inventoryCountry").value,
-        phone: document.querySelector("#inventoryPhone").value
+        countryCode: country.country,
+        phone: `${country.callingCode}${digits}`
       })
     });
     event.currentTarget.reset();
@@ -410,6 +457,10 @@ document.querySelector("#numberInventoryForm").addEventListener("submit", async 
   } finally {
     submitButton.disabled = false;
   }
+});
+document.querySelector("#inventoryCountry").addEventListener("change", async () => {
+  document.querySelector("#numberInventoryError").textContent = "";
+  updateInventoryPhoneLimit();
 });
 document.querySelector("#numberInventoryList").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-delete-number]");

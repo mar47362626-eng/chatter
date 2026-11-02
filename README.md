@@ -75,7 +75,7 @@ PAYSTACK_PLAN_CODE=PLN_your_monthly_plan_code
 CHATTER_PUBLIC_URL=https://YOUR-RENDER-SERVICE.onrender.com
 ```
 
-Use the secret key and plan code from the same **live** Paystack account. Keep the secret key only in Render; never put it in browser code, GitHub, or chat. The existing `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY`, Brevo variables, and moderator password must also remain configured in Render. After deploying and running the schema, sign in at `/moderation.html`, open **Phone numbers**, and add each foreign number and its country. Only available, unassigned numbers can be removed.
+Use the secret key and plan code from the same **live** Paystack account. Keep the secret key only in Render; never put it in browser code, GitHub, or chat. The existing `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY`, Brevo variables, and moderator password must also remain configured in Render. After deploying and running the schema, sign in at `/moderation.html`, open **Phone numbers**, choose the country from the calling-code dropdown, and enter only the national digits. The dropdown lists valid national-number lengths, and the server validates the selected country and full number. Only available, unassigned numbers can be removed.
 
 Enable Paystack's `charge.success`, `subscription.create`, `subscription.not_renew`, `subscription.disable`, and `invoice.payment_failed` webhook events so payments, renewals, failures, and cancellations update Chatter.
 

@@ -23,6 +23,7 @@ h2 { font-size: 18px; }
 .login-panel .description { margin: 11px 0 22px; }
 form label, .toolbar label { display: block; margin: 12px 0 7px; color: #435149; font-size: 12px; font-weight: 700; }
 input, select { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid #dfe8e1; border-radius: 9px; background: #fff; color: #17241f; }
+.number-length-hint { display: block; margin-top: 6px; color: #829087; font-size: 10px; line-height: 1.5; }
 button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: #1c9a70; color: #fff; cursor: pointer; font-size: 12px; font-weight: 700; }
 button:hover { background: #177d5c; }
 .login-panel form button { width: 100%; margin-top: 10px; }

@@ -107,11 +107,14 @@
             <form id="numberInventoryForm" class="toolbar">
               <div class="search-field">
                 <label for="inventoryCountry">Country</label>
-                <input id="inventoryCountry" type="text" maxlength="80" placeholder="United States" required />
+                <select id="inventoryCountry" required>
+                  <option value="">Loading countries…</option>
+                </select>
               </div>
               <div class="search-field">
-                <label for="inventoryPhone">International phone number</label>
-                <input id="inventoryPhone" type="tel" inputmode="tel" placeholder="+12025550123" required />
+                <label for="inventoryPhone">Number digits (without country code)</label>
+                <input id="inventoryPhone" type="tel" inputmode="numeric" autocomplete="off" maxlength="15" placeholder="Select a country first" required />
+                <small class="number-length-hint" id="inventoryPhoneLengthHint">Select a country to see its calling code and number length.</small>
               </div>
               <button type="submit">Add number</button>
             </form>
@@ -216,6 +219,6 @@
         </section>
       </main>
     </div>
-    <script src="moderation.js?v=20261102-number-inventory"></script>
+    <script src="moderation.js?v=20261102-country-number-limits"></script>
   </body>
 </html>

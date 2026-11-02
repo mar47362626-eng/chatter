@@ -3,7 +3,8 @@ const { parseEnv, promisify } = require("node:util");
 const { createServer } = require("node:http");
 const { existsSync, readFileSync, statSync } = require("node:fs");
 const { extname, join, normalize } = require("node:path");
-const { getCountries, getCountryCallingCode, isValidPhoneNumber } = require("libphonenumber-js");
+const { getCountries, getCountryCallingCode, isValidPhoneNumber, parsePhoneNumber } = require("libphonenumber-js");
+const phoneMetadata = require("libphonenumber-js/metadata.max.json");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
@@ -321,7 +322,8 @@ function countryCallingCodes() {
   return getCountries().map((country) => ({
     country,
     name: displayNames.of(country) || country,
-    callingCode: `+${getCountryCallingCode(country)}`
+    callingCode: `+${getCountryCallingCode(country)}`,
+    nationalNumberLengths: phoneMetadata.countries[country][3]
   })).sort((left, right) => left.name.localeCompare(right.name));
 }
 
@@ -1135,17 +1137,30 @@ async function handleApi(request, response, url) {
         AND ns.status IN ('active', 'past_due')
       ORDER BY n.created_at DESC
     `).all();
-    return respond(response, 200, { numbers });
+    return respond(response, 200, {
+      numbers,
+      countries: countryCallingCodes().filter((country) => country.country !== "NG")
+    });
   }
 
   if (route === "POST /api/moderation/numbers") {
     await requireModerator(request, response);
     const input = await readJson(request);
     const phone = normalizePhone(input.phone);
-    const country = cleanText(input.country, "Country", 80);
+    const countryCode = typeof input.countryCode === "string" ? input.countryCode.toUpperCase() : "";
+    if (!getCountries().includes(countryCode) || countryCode === "NG") {
+      throw new HttpError(400, "Choose a foreign country from the list.");
+    }
+    const country = new Intl.DisplayNames(["en"], { type: "region" }).of(countryCode) || countryCode;
     if (phone.startsWith("+234")) throw new HttpError(400, "Only non-Nigerian numbers can be added as purchasable numbers.");
-    if (!isValidPhoneNumber(phone)) throw new HttpError(400, "Enter a valid international phone number.");
-    if (country.length < 2) throw new HttpError(400, "Enter the number's country.");
+    const parsedPhone = parsePhoneNumber(phone);
+    if (
+      !phone.startsWith(`+${getCountryCallingCode(countryCode)}`) ||
+      parsedPhone?.country !== countryCode ||
+      !isValidPhoneNumber(phone, countryCode)
+    ) {
+      throw new HttpError(400, `Enter a valid ${country} number using the selected country's calling code and number length.`);
+    }
     const id = randomBytes(16).toString("hex");
     try {
       await database.prepare(`
