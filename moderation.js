@@ -432,8 +432,9 @@ document.querySelector("#refreshNumbersButton").addEventListener("click", async 
 });
 document.querySelector("#numberInventoryForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const error = document.querySelector("#numberInventoryError");
-  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  const submitButton = form.querySelector('button[type="submit"]');
   error.textContent = "";
   submitButton.disabled = true;
   try {
@@ -450,7 +451,7 @@ document.querySelector("#numberInventoryForm").addEventListener("submit", async 
         phone: `${country.callingCode}${digits}`
       })
     });
-    event.currentTarget.reset();
+    form.reset();
     await loadNumbers();
   } catch (requestError) {
     error.textContent = requestError.message;
