@@ -54,17 +54,14 @@
             <input class="auth-input" id="registerEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" maxlength="254" required />
             <label class="auth-label" for="registerPassword">Password</label>
             <input class="auth-input" id="registerPassword" name="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" maxlength="128" required />
-            <label class="auth-label" for="registerPhone">Phone number</label>
+            <label class="auth-label" for="registerPhone">Nigerian phone number</label>
             <div class="phone-input">
               <select id="countryCode" name="countryCode" aria-label="Country calling code">
                 <option value="+234" selected>🇳🇬 +234</option>
-                <option value="+1">🇺🇸 +1</option>
-                <option value="+44">🇬🇧 +44</option>
-                <option value="+233">🇬🇭 +233</option>
-                <option value="+91">🇮🇳 +91</option>
               </select>
               <input id="registerPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="801 234 5678" minlength="7" maxlength="20" required />
             </div>
+            <p class="auth-hint">Use your own Nigerian number to register. Foreign Chatter numbers can be purchased after sign-in.</p>
             <p class="auth-field-error" id="registerError" role="alert"></p>
             <button class="auth-submit" type="submit">Continue <span aria-hidden="true">→</span></button>
             <p class="auth-terms">We’ll email you a one-time code to verify your address. Your password is securely hashed. Admins can see account details and recorded feature actions (such as sign-ins, contact or profile changes, messages sent, and call outcomes), but not private message contents, chat viewing, or call audio/video. Moderators can review messages only after they are reported.</p>
@@ -238,6 +235,11 @@
         </div>
 
         <form class="composer" id="messageForm">
+          <div class="attachment-preview" id="attachmentPreview" hidden>
+            <img id="attachmentPreviewImage" alt="Selected image preview" />
+            <span><strong>Photo ready to send</strong><small>Images up to 5 MB</small></span>
+            <button type="button" class="icon-button" id="removeAttachmentButton" aria-label="Remove selected image">×</button>
+          </div>
           <div class="composer-tools">
             <button type="button" class="icon-button composer-icon" id="attachButton" aria-label="Attach a file" title="Attach a file">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 12.5 6.6-6.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a5.2 5.2 0 0 1-7.4-7.4l8.4-8.4" /></svg>
@@ -255,7 +257,7 @@
             <button type="button" aria-label="Add smiling face">😊</button><button type="button" aria-label="Add heart">💛</button><button type="button" aria-label="Add laughing face">😂</button><button type="button" aria-label="Add thumbs up">👍</button><button type="button" aria-label="Add party popper">🎉</button><button type="button" aria-label="Add sparkle">✨</button>
           </div>
         </form>
-        <input type="file" id="fileInput" hidden />
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" hidden />
       </section>
     </main>
     <div class="dialog-backdrop" id="contactDialog" hidden>
@@ -271,10 +273,6 @@
           <div class="phone-input">
             <select id="contactCountryCode" aria-label="Contact country calling code">
               <option value="+234" selected>🇳🇬 +234</option>
-              <option value="+1">🇺🇸 +1</option>
-              <option value="+44">🇬🇧 +44</option>
-              <option value="+233">🇬🇭 +233</option>
-              <option value="+91">🇮🇳 +91</option>
             </select>
             <input id="contactPhone" type="tel" inputmode="numeric" autocomplete="tel-national" minlength="7" maxlength="20" placeholder="801 234 5678" required />
           </div>
@@ -289,6 +287,12 @@
         <span class="dialog-eyebrow">YOUR ACCOUNT</span>
         <h2 id="settingsDialogTitle">Settings</h2>
         <p class="dialog-description">Update the details on your Chatter account.</p>
+        <div class="profile-photo-editor">
+          <span class="profile-avatar avatar-you" id="settingsAvatar">A</span>
+          <span class="profile-photo-copy"><strong>Profile photo</strong><small>Choose a JPEG, PNG, or WebP image up to 5 MB.</small></span>
+          <button type="button" class="profile-photo-button" id="chooseProfilePhotoButton">Change</button>
+          <input type="file" id="profilePhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
+        </div>
         <form id="settingsForm">
           <label class="auth-label" for="settingsName">Name</label>
           <input class="auth-input" id="settingsName" type="text" autocomplete="name" maxlength="40" required />
@@ -299,6 +303,21 @@
           <p class="auth-field-error" id="settingsError" role="alert"></p>
           <button class="auth-submit" type="submit">Save changes <span aria-hidden="true">→</span></button>
         </form>
+        <div class="share-link-panel">
+          <label class="auth-label" for="chatShareLink">Your chat link</label>
+          <div class="share-link-row">
+            <input class="auth-input" id="chatShareLink" type="text" readonly aria-label="Your shareable chat link" />
+            <button type="button" class="profile-photo-button" id="copyChatLinkButton">Copy</button>
+          </div>
+          <p class="dialog-description">Anyone with this link can start a Chatter conversation with you. It does not show your email or phone number.</p>
+        </div>
+        <div class="share-link-panel" id="numberSubscriptionPanel">
+          <span class="auth-label">International Chatter number</span>
+          <p class="dialog-description">Choose a foreign number to use as your Chatter contact number. It is assigned to your account after payment and only works for finding and messaging Chatter users; it does not receive phone calls or SMS.</p>
+          <div id="numberSubscriptionDetails"></div>
+          <div id="foreignNumberList"></div>
+          <p class="dialog-description" id="numberSubscriptionStatus" role="status" aria-live="polite" hidden></p>
+        </div>
       </section>
     </div>
     <div class="dialog-backdrop" id="groupDialog" hidden>
@@ -416,6 +435,7 @@
       </section>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=20261030-email-verification"></script>
+    <script src="country-codes.js?v=20261101"></script>
+    <script src="app.js?v=20261102-live-number-subscriptions"></script>
   </body>
 </html>

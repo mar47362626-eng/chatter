@@ -3,6 +3,8 @@ create table if not exists public.users (
   name text not null,
   email text not null,
   phone text not null,
+  avatar_path text,
+  share_token text,
   password_hash text not null,
   password_salt text not null,
   created_at timestamptz not null default now()
@@ -45,6 +47,8 @@ create table if not exists public.messages (
   text text not null,
   attachment_name text,
   attachment_size text,
+  attachment_path text,
+  attachment_mime text,
   created_at timestamptz not null default now()
 );
 
@@ -76,7 +80,7 @@ create table if not exists public.message_reports (
   reporter_id text not null references public.users(id) on delete cascade,
   reason text not null,
   status text not null default 'open' check (status in ('open', 'resolved', 'dismissed')),
-  created_at timestamptz not null default now(),
+  created_at text not null,
   unique (message_id, reporter_id)
 );
 
@@ -85,7 +89,7 @@ create table if not exists public.moderation_audit (
   report_id text not null,
   actor_id text not null,
   action text not null,
-  created_at timestamptz not null default now()
+  created_at text not null
 );
 
 create table if not exists public.user_activity (
@@ -93,6 +97,54 @@ create table if not exists public.user_activity (
   user_id text references public.users(id) on delete set null,
   action text not null,
   details jsonb not null default '{}'::jsonb,
+  created_at text not null
+);
+
+create table if not exists public.test_payment_transactions (
+  reference text primary key,
+  user_id text not null references public.users(id) on delete cascade,
+  customer_email text not null,
+  amount integer not null check (amount = 10000),
+  currency text not null check (currency = 'NGN'),
+  status text not null default 'pending' check (status in ('pending', 'success')),
+  created_at timestamptz not null default now(),
+  verified_at timestamptz
+);
+
+create table if not exists public.foreign_numbers (
+  id text primary key,
+  phone text not null unique check (phone ~ '^\+[1-9][0-9]{6,14}$'),
+  country text not null,
+  status text not null default 'available' check (status in ('available', 'reserved', 'assigned')),
+  assigned_user_id text references public.users(id) on delete set null,
+  reserved_until timestamptz,
+  created_at timestamptz not null default now(),
+  check ((status = 'assigned') = (assigned_user_id is not null))
+);
+
+create table if not exists public.number_subscriptions (
+  id text primary key,
+  user_id text not null references public.users(id) on delete cascade,
+  number_id text not null references public.foreign_numbers(id),
+  reference text not null unique,
+  paystack_subscription_code text unique,
+  paystack_email_token text,
+  status text not null default 'pending' check (status in ('pending', 'active', 'past_due', 'cancelled', 'ended', 'expired')),
+  cancel_at_period_end boolean not null default false,
+  amount integer not null check (amount = 1000000),
+  currency text not null check (currency = 'NGN'),
+  next_payment_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.number_subscription_payments (
+  reference text primary key,
+  subscription_id text not null references public.number_subscriptions(id) on delete cascade,
+  amount integer not null check (amount = 1000000),
+  currency text not null check (currency = 'NGN'),
+  status text not null check (status in ('success', 'failed')),
+  paid_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -100,7 +152,7 @@ create table if not exists public.admin_access_log (
   id text primary key,
   action text not null,
   report_id text,
-  created_at timestamptz not null default now()
+  created_at text not null
 );
 
 create table if not exists public.sessions (
@@ -129,6 +181,17 @@ alter table public.moderation_audit enable row level security;
 alter table public.user_activity enable row level security;
 alter table public.admin_access_log enable row level security;
 alter table public.sessions enable row level security;
+alter table public.foreign_numbers enable row level security;
+alter table public.number_subscriptions enable row level security;
+alter table public.number_subscription_payments enable row level security;
+
+create index if not exists foreign_numbers_status_created on public.foreign_numbers (status, created_at);
+create index if not exists number_subscriptions_user_status on public.number_subscriptions (user_id, status);
+create index if not exists number_subscriptions_renewal on public.number_subscriptions (status, next_payment_at);
+create unique index if not exists number_subscriptions_one_current_per_user
+  on public.number_subscriptions (user_id) where status in ('pending', 'active', 'past_due');
+create unique index if not exists number_subscriptions_one_current_per_number
+  on public.number_subscriptions (number_id) where status in ('pending', 'active', 'past_due');
 
 create or replace function public.chatter_render_statement(p_statement text, p_parameters jsonb)
 returns text
@@ -242,3 +305,29 @@ revoke all on function public.chatter_batch(jsonb) from public, anon, authentica
 grant execute on function public.chatter_render_statement(text, jsonb) to service_role;
 grant execute on function public.chatter_query(text, jsonb) to service_role;
 grant execute on function public.chatter_batch(jsonb) to service_role;
+
+alter table public.users add column if not exists avatar_path text;
+alter table public.users add column if not exists share_token text;
+alter table public.messages add column if not exists attachment_path text;
+alter table public.messages add column if not exists attachment_mime text;
+
+update public.users
+set share_token = substr(md5(gen_random_uuid()::text), 1, 16)
+  || substr(md5(gen_random_uuid()::text), 1, 16)
+  || substr(md5(gen_random_uuid()::text), 1, 16)
+where share_token is null;
+alter table public.users alter column share_token set not null;
+create unique index if not exists users_share_token_unique on public.users (share_token);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'chatter-media',
+  'chatter-media',
+  false,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;

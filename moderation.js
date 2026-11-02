@@ -15,6 +15,7 @@ const activityPageSize = 100;
 const adminViews = {
   overview: document.querySelector("#overviewView"),
   users: document.querySelector("#usersView"),
+  numbers: document.querySelector("#numbersView"),
   activity: document.querySelector("#activityView"),
   calls: document.querySelector("#callsView"),
   reports: document.querySelector("#reportsView"),
@@ -77,6 +78,7 @@ function renderReports(reports) {
         <span class="report-status ${escapeHtml(report.status)}">${escapeHtml(report.status)}</span>
       </div>
       <blockquote class="reported-message">${escapeHtml(report.messageText || report.attachmentName || "Attachment")}</blockquote>
+      ${report.attachmentMediaUrl ? `<a class="reported-image-link" href="${escapeHtml(report.attachmentMediaUrl)}" target="_blank" rel="noopener noreferrer"><img class="reported-image" src="${escapeHtml(report.attachmentMediaUrl)}" alt="Image attached to the reported message" loading="lazy" /></a>` : ""}
       <p class="report-reason"><strong>Reason:</strong> ${escapeHtml(report.reason)}</p>
       ${report.status === "open" ? `
         <div class="report-actions">
@@ -276,6 +278,24 @@ async function loadAudit() {
   renderAudit(result.entries);
 }
 
+async function loadNumbers() {
+  const result = await api("/api/moderation/numbers");
+  document.querySelector("#numberInventoryList").innerHTML = renderTable(
+    ["Country", "Number", "Status", "Assigned customer", "Next payment", "Action"],
+    result.numbers.map((number) => `
+      <tr>
+        <td>${escapeHtml(number.country)}</td>
+        <td>${escapeHtml(number.phone)}</td>
+        <td>${escapeHtml(number.subscriptionStatus === "past_due" ? "Payment overdue" : number.status)}</td>
+        <td>${escapeHtml(number.assignedUserName || number.assignedUserEmail || "—")}${number.assignedUserName && number.assignedUserEmail ? `<small class="table-subtext">${escapeHtml(number.assignedUserEmail)}</small>` : ""}</td>
+        <td>${escapeHtml(formatDate(number.nextPaymentAt))}</td>
+        <td>${number.status === "available" ? `<button class="secondary-button" type="button" data-delete-number="${escapeHtml(number.id)}">Remove</button>` : "—"}</td>
+      </tr>
+    `),
+    "No numbers have been added to the inventory."
+  );
+}
+
 function showView(view) {
   for (const [viewName, element] of Object.entries(adminViews)) {
     element.hidden = viewName !== view;
@@ -297,7 +317,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     document.querySelector("#moderatorPassword").value = "";
     showDashboard();
-    await Promise.all([loadOverview(), loadDashboard(), loadAudit()]);
+    await Promise.all([loadOverview(), loadDashboard(), loadAudit(), loadNumbers()]);
   } catch (error) {
     loginError.textContent = error.message;
   }
@@ -360,6 +380,51 @@ document.querySelector("#usersList").addEventListener("click", (event) => {
 });
 document.querySelector("#refreshCallsButton").addEventListener("click", loadCalls);
 document.querySelector("#refreshSystemButton").addEventListener("click", loadSystem);
+document.querySelector("#refreshNumbersButton").addEventListener("click", async () => {
+  const error = document.querySelector("#numberInventoryError");
+  error.textContent = "";
+  try {
+    await loadNumbers();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  }
+});
+document.querySelector("#numberInventoryForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const error = document.querySelector("#numberInventoryError");
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  error.textContent = "";
+  submitButton.disabled = true;
+  try {
+    await api("/api/moderation/numbers", {
+      method: "POST",
+      body: JSON.stringify({
+        country: document.querySelector("#inventoryCountry").value,
+        phone: document.querySelector("#inventoryPhone").value
+      })
+    });
+    event.currentTarget.reset();
+    await loadNumbers();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+document.querySelector("#numberInventoryList").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete-number]");
+  if (!button) return;
+  const error = document.querySelector("#numberInventoryError");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    await api(`/api/moderation/numbers/${button.dataset.deleteNumber}`, { method: "DELETE" });
+    await loadNumbers();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    button.disabled = false;
+  }
+});
 document.querySelector("#userSearchForm").addEventListener("submit", (event) => {
   event.preventDefault();
   loadUsers();
@@ -372,6 +437,7 @@ document.querySelectorAll("[data-admin-view]").forEach((button) => {
     try {
       if (view === "overview") await loadOverview();
       if (view === "users") await loadUsers();
+      if (view === "numbers") await loadNumbers();
       if (view === "activity") await loadActivity();
       if (view === "calls") await loadCalls();
       if (view === "reports") await loadDashboard();
@@ -417,7 +483,7 @@ async function startModerationPage() {
       return;
     }
     showDashboard();
-    await Promise.all([loadOverview(), loadDashboard(), loadAudit()]);
+    await Promise.all([loadOverview(), loadDashboard(), loadAudit(), loadNumbers()]);
   } catch (error) {
     showLogin();
     loginError.textContent = error.message;

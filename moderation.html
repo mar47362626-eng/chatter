@@ -15,7 +15,7 @@
     <section id="loginPanel" class="panel login-panel">
       <p class="eyebrow">RESTRICTED ACCESS</p>
       <h1>Admin sign in</h1>
-      <p class="description">Manage account and usage metadata, call history, system status, and reported messages. Private chat content and call media are never shown here.</p>
+      <p class="description">Manage account and usage metadata, call history, system status, and reported messages. Message images are available only when that message has been reported; call media is never shown here.</p>
       <form id="moderatorLoginForm">
         <label for="moderatorPassword">Admin password</label>
         <input id="moderatorPassword" type="password" autocomplete="current-password" required />
@@ -33,6 +33,9 @@
           <button type="button" class="nav-item" data-admin-view="users">
             <span class="nav-icon">♙</span><span>Users</span>
           </button>
+          <button type="button" class="nav-item" data-admin-view="numbers">
+            <span class="nav-icon">☎</span><span>Phone numbers</span>
+          </button>
           <button type="button" class="nav-item" data-admin-view="activity">
             <span class="nav-icon">◷</span><span>User activity</span>
           </button>
@@ -49,7 +52,7 @@
             <span class="nav-icon">⚙</span><span>System status</span>
           </button>
         </nav>
-        <div class="sidebar-note">Usage logs contain action types and times only. Private message text and call audio/video are not available to admins.</div>
+        <div class="sidebar-note">Usage logs contain action types and times only. Private messages and images are not available to admins unless a message is reported. Call audio/video is never available.</div>
         <button class="sidebar-logout" id="moderatorLogoutButton" type="button">Sign out</button>
       </aside>
       <main class="admin-main">
@@ -88,6 +91,32 @@
             </form>
             <p id="usersError" class="error" role="alert"></p>
             <div id="usersList" class="table-wrap"></div>
+          </section>
+        </section>
+        <section id="numbersView" class="admin-view" hidden>
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">CUSTOMER NUMBER INVENTORY</p>
+              <h1>Phone numbers</h1>
+              <p class="description">Add foreign numbers that you have lawfully obtained from a carrier. Assigned numbers are reserved for the customer with an active Chatter subscription; Chatter does not route real phone calls or SMS.</p>
+            </div>
+            <button class="secondary-button" id="refreshNumbersButton" type="button">Refresh</button>
+          </div>
+          <section class="panel">
+            <h2>Add a number</h2>
+            <form id="numberInventoryForm" class="toolbar">
+              <div class="search-field">
+                <label for="inventoryCountry">Country</label>
+                <input id="inventoryCountry" type="text" maxlength="80" placeholder="United States" required />
+              </div>
+              <div class="search-field">
+                <label for="inventoryPhone">International phone number</label>
+                <input id="inventoryPhone" type="tel" inputmode="tel" placeholder="+12025550123" required />
+              </div>
+              <button type="submit">Add number</button>
+            </form>
+            <p id="numberInventoryError" class="error" role="alert"></p>
+            <div id="numberInventoryList" class="table-wrap"></div>
           </section>
         </section>
         <section id="activityView" class="admin-view" hidden>
@@ -132,7 +161,7 @@
             <div>
               <p class="eyebrow">USER-REPORTED CONTENT ONLY</p>
               <h1>Reported messages</h1>
-              <p class="description">Find a report by either participant’s phone number. Only reported messages appear.</p>
+              <p class="description">Find a report by either participant’s phone number. Only reported messages appear; reported image views are recorded in the audit log.</p>
             </div>
             <button class="secondary-button" id="refreshReportsButton" type="button">Refresh</button>
           </div>
@@ -187,6 +216,6 @@
         </section>
       </main>
     </div>
-    <script src="moderation.js?v=20261030-admin-console"></script>
+    <script src="moderation.js?v=20261102-number-inventory"></script>
   </body>
 </html>

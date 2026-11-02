@@ -18,6 +18,12 @@ Chatter is a chat application served by Node.js. It uses Supabase PostgreSQL for
 
 Before starting Chatter, create a Supabase project and run [`supabase-schema.sql`](./supabase-schema.sql) in its SQL Editor. Configure `SUPABASE_PROJECT_ID` and `SUPABASE_SERVICE_ROLE_KEY` on the server. Chatter calls private Supabase database RPC functions through the server-side REST API; the service-role key is never sent to browsers. The schema enables row-level security without public table policies and grants the database RPC functions only to the `service_role`. Passwords are hashed before storage. The HTTP-only session cookie uses `SameSite=Strict`; signing in remains active across page refreshes and server restarts, and sessions expire after 7 days without activity or when you log out.
 
+## Profile photos, chat photos, and chat links
+
+Registration requires a valid Nigerian phone number. The contact form includes a bundled list of 245 country and territory calling codes from `libphonenumber-js`; the list works without an API request. Users can choose a JPEG, PNG, or WebP profile photo (up to 5 MB), send those images in conversations, and copy a personal chat link from Settings. Opening a chat link requires a Chatter account and sign-in; it does not expose the sender's email or phone number. Anyone with the link can start a conversation, so share it only with people you want to contact you.
+
+Run the updated `supabase-schema.sql` in the Supabase SQL Editor to add the profile and message image fields and create the private `chatter-media` Storage bucket. This is safe to run on an existing Chatter database; existing accounts receive private chat-link tokens automatically. Image access is served through the authenticated Node.js server, not a public Storage bucket. Moderators can view an image only when its message is reported, and image views are written to the moderation audit log.
+
 ## Brevo email verification
 
 New accounts must verify their email before they are created. Chatter sends a six-digit verification code through Brevo, expires codes after 10 minutes, limits each code to five attempts, and waits 60 seconds before sending another code to the same address. After successful verification, Chatter creates the account and sends a branded welcome email. A welcome-email delivery problem does not prevent sign-in after the account has been created.
@@ -49,9 +55,35 @@ npm.cmd start
 
 Use your TURN provider's actual address and credentials, keep credentials out of source control, and prefer short-lived TURN credentials. Calls cannot ring users whose Chatter app is closed, and this local development server is not itself an internet hosting setup.
 
+## Selling foreign Chatter numbers
+
+Users register with a valid Nigerian (+234) phone number. In Settings, they can subscribe to an available foreign Chatter number for **₦10,000 per month**. Paystack handles automatic monthly recurring charges. After payment is verified, the number is assigned to that account and becomes its Chatter contact number; other Chatter users can find the customer with it. Customers can cancel future renewals in Settings. A cancelled number remains assigned through its paid period.
+
+This feature does not create phone numbers or enable real calls/SMS. Add only numbers that you have lawfully obtained from a carrier. The foreign number works as a Chatter contact identifier only; external calls and SMS still require a connected telecom provider. The app’s existing calls are browser-to-browser WebRTC calls.
+
+Before deploying the new feature, run the updated `supabase-schema.sql` in the Supabase SQL Editor. It creates the private inventory, subscription, and payment tables. In the live Paystack dashboard, create a **monthly NGN plan for ₦10,000** and configure its webhook URL as:
+
+```text
+https://YOUR-RENDER-SERVICE.onrender.com/api/paystack/webhook
+```
+
+In Render → your service → Environment, add these values as private environment variables:
+
+```text
+PAYSTACK_SECRET_KEY=sk_live_your_live_secret_key
+PAYSTACK_PLAN_CODE=PLN_your_monthly_plan_code
+CHATTER_PUBLIC_URL=https://YOUR-RENDER-SERVICE.onrender.com
+```
+
+Use the secret key and plan code from the same **live** Paystack account. Keep the secret key only in Render; never put it in browser code, GitHub, or chat. The existing `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY`, Brevo variables, and moderator password must also remain configured in Render. After deploying and running the schema, sign in at `/moderation.html`, open **Phone numbers**, and add each foreign number and its country. Only available, unassigned numbers can be removed.
+
+Enable Paystack's `charge.success`, `subscription.create`, `subscription.not_renew`, `subscription.disable`, and `invoice.payment_failed` webhook events so payments, renewals, failures, and cancellations update Chatter.
+
+Paystack must support NGN recurring subscriptions for your merchant account. Check that the plan is active and that the account is approved for live payments before accepting customers. Do not enter a customer's live payment details yourself.
+
 ## Disclosed moderation
 
-The admin console includes account details, activity metadata, call participants/outcomes, system health, reported messages, and a moderation audit log. The User activity view can filter by account name, email, or phone; the Users directory also has a per-account activity link. Activity entries cover recorded actions such as account creation, sign-ins, contact and profile changes, groups created, messages sent, reports, conversation clearing, and call outcomes. The view paginates through matching entries. Activity logging is forward-looking and does not backfill actions from before it was enabled. It records action types and timestamps, not message text, chat viewing, attachment contents, conversation contents, or call media. The registration and login screens disclose this collection. Moderators can review a message only after a user reports it; admin sign-ins, report views, and moderation actions are recorded in an audit log.
+The admin console includes account details, activity metadata, call participants/outcomes, system health, reported messages, and a moderation audit log. The User activity view can filter by account name, email, or phone; the Users directory also has a per-account activity link. Activity entries cover recorded actions such as account creation, sign-ins, contact and profile changes, groups created, messages sent, reports, conversation clearing, and call outcomes. The view paginates through matching entries. Activity logging is forward-looking and does not backfill actions from before it was enabled. It records action types and timestamps, not message text, chat viewing, attachment contents, conversation contents, or call media. The registration and login screens disclose this collection. Moderators can review a message only after a user reports it; reported image views, admin sign-ins, report views, and moderation actions are recorded in an audit log.
 
 Configure a strong moderator password of at least 20 characters before starting the server:
 

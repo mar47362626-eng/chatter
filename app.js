@@ -128,6 +128,8 @@ let callDurationTimer = 0;
 let callDisconnectTimer = 0;
 let microphoneEnabled = true;
 let cameraEnabled = true;
+let pendingImage = null;
+let pendingImageUrl = "";
 
 const appShell = document.querySelector(".app-shell");
 const conversationList = document.querySelector("#conversationList");
@@ -170,6 +172,56 @@ async function apiRequest(path, options = {}) {
   return result;
 }
 
+function avatarContent(initials, imageUrl) {
+  return imageUrl
+    ? `<img src="${escapeHtml(imageUrl)}" alt="" loading="lazy" />`
+    : escapeHtml(initials);
+}
+
+function countryFlag(countryCode) {
+  return [...countryCode.toUpperCase()].map((character) =>
+    String.fromCodePoint(character.codePointAt(0) + 127397)
+  ).join("");
+}
+
+function loadCountryCallingCodes() {
+  const countries = window.CHATTER_COUNTRIES;
+  if (!Array.isArray(countries) || countries.length < 200) {
+    throw new Error("The worldwide country calling-code list could not be loaded. Refresh the page and try again.");
+  }
+  for (const select of [document.querySelector("#countryCode"), document.querySelector("#contactCountryCode")]) {
+    const selectedCountry = select.selectedOptions[0]?.dataset.country || "NG";
+    const availableCountries = select.id === "countryCode"
+      ? countries.filter((country) => country.country === "NG")
+      : countries;
+    select.replaceChildren(...availableCountries.map((country) => {
+      const option = document.createElement("option");
+      option.value = country.callingCode;
+      option.textContent = `${countryFlag(country.country)} ${country.name} (${country.callingCode})`;
+      option.dataset.country = country.country;
+      return option;
+    }));
+    select.selectedIndex = Math.max(0, availableCountries.findIndex((country) => country.country === selectedCountry));
+  }
+}
+
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      const data = value.slice(value.indexOf(",") + 1);
+      if (!data) {
+        reject(new Error("Could not read the selected image."));
+        return;
+      }
+      resolve({ name: file.name, type: file.type, data });
+    });
+    reader.addEventListener("error", () => reject(new Error("Could not read the selected image.")));
+    reader.readAsDataURL(file);
+  });
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -193,9 +245,10 @@ function applyProfile() {
     selfChat.initials = initials;
   }
   document.querySelector("#profileName").textContent = name;
-  document.querySelector("#profileAvatar").textContent = initials;
+  document.querySelector("#profileAvatar").innerHTML = avatarContent(initials, profile?.avatarUrl);
+  document.querySelector("#settingsAvatar").innerHTML = avatarContent(initials, profile?.avatarUrl);
   document.querySelector("#selfContactName").textContent = `${name} (You)`;
-  document.querySelector("#selfContactAvatar").textContent = initials;
+  document.querySelector("#selfContactAvatar").innerHTML = avatarContent(initials, profile?.avatarUrl);
   document.querySelector("#profileContact").textContent = profile?.email
     ? `${profile.email} · ${profile.phone.slice(-4)}`
     : "Email and phone account";
@@ -218,7 +271,7 @@ function renderChatList() {
 
   conversationList.innerHTML = filtered.length ? filtered.map((chat) => `
     <button class="conversation ${chat.id === activeId ? "is-selected" : ""}" type="button" role="listitem" data-chat-id="${escapeHtml(chat.id)}" aria-current="${chat.id === activeId ? "true" : "false"}">
-      <span class="avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""} ${chat.online ? "online" : ""}" aria-label="${chat.online ? "Online" : "Offline"}">${escapeHtml(chat.initials)}</span>
+      <span class="avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""} ${chat.online ? "online" : ""}" aria-label="${chat.online ? "Online" : "Offline"}">${avatarContent(chat.initials, chat.avatarUrl)}</span>
       <span class="conversation-copy">
         <span class="conversation-topline"><span class="conversation-name">${escapeHtml(chat.name)}</span><span class="conversation-time">${escapeHtml(chat.time)}</span></span>
         <span class="conversation-preview-row"><span class="conversation-preview">${escapeHtml(chat.preview)}</span>${chat.unread ? `<span class="unread-badge">${chat.unread}</span>` : ""}</span>
@@ -245,7 +298,7 @@ function renderNewChatContacts() {
   document.querySelector("#newChatContactCount").textContent = contacts.length ? String(matches.length) : "";
   document.querySelector("#newChatContactList").innerHTML = matches.map((chat) => `
     <button class="new-chat-contact" type="button" data-new-chat-id="${escapeHtml(chat.id)}">
-      <span class="new-chat-avatar presence-avatar ${escapeHtml(chat.avatar)} ${chat.online ? "online" : ""}" aria-label="${chat.online ? "Online" : "Offline"}">${escapeHtml(chat.initials)}</span>
+      <span class="new-chat-avatar presence-avatar ${escapeHtml(chat.avatar)} ${chat.online ? "online" : ""}" aria-label="${chat.online ? "Online" : "Offline"}">${avatarContent(chat.initials, chat.avatarUrl)}</span>
       <span class="new-chat-contact-copy">
         <strong>${escapeHtml(chat.name)}</strong>
         <span>${escapeHtml(chat.phone || contactUsername(chat))}</span>
@@ -281,7 +334,7 @@ function renderHeader(chat) {
     ? `<span class="status-dot"></span>Online`
     : chat.phone ? `Contact · ${escapeHtml(chat.phone)}` : escapeHtml(chat.status);
   headerPerson.innerHTML = `
-    <span class="avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""} ${chat.online ? "online" : ""}">${escapeHtml(chat.initials)}</span>
+    <span class="avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""} ${chat.online ? "online" : ""}">${avatarContent(chat.initials, chat.avatarUrl)}</span>
     <span class="header-copy"><strong>${escapeHtml(chat.name)}</strong><span>${onlineLabel}</span></span>
   `;
   const memberCount = Number.parseInt(chat.status, 10);
@@ -290,7 +343,7 @@ function renderHeader(chat) {
     ? `Community · ${chat.status}`
     : `A group with ${contactCount} ${contactCount === 1 ? "contact" : "contacts"}`;
   chatIntro.innerHTML = `
-    <span class="avatar intro-avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""}">${escapeHtml(chat.initials)}</span>
+    <span class="avatar intro-avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""}">${avatarContent(chat.initials, chat.avatarUrl)}</span>
     <strong>${escapeHtml(chat.name)}</strong>
     <span>${chat.phone ? `Saved contact · ${escapeHtml(chat.phone)}` : chat.group ? escapeHtml(groupDescription) : chat.self ? "Your personal notes and messages" : "You’re connected on Chatter"}</span>
     <span class="intro-badge"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 13 3.4v4.1c0 3-2.1 5.6-5 7-2.9-1.4-5-4-5-7V3.4l5-1.9Z" /><path d="m5.8 7.8 1.5 1.5 3-3.2" /></svg> Messages are private</span>
@@ -345,14 +398,18 @@ function renderMessages() {
         <span class="call-log-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7.2 3.8 10 7.5 8.3 9.2a14 14 0 0 0 6.5 6.5l1.7-1.7 3.7 2.8-.8 3a1.5 1.5 0 0 1-1.7 1.1A18.8 18.8 0 0 1 3.1 6.3a1.5 1.5 0 0 1 1.1-1.7l3-.8Z" /></svg></span>
         <span class="call-log-details"><strong>${callLabel}</strong><span>${callStatus}</span></span>
       </span>
+    ` : message.attachment?.url && ["image/jpeg", "image/png", "image/webp"].includes(message.attachment.type) ? `
+      <a class="bubble-image-link" href="${escapeHtml(message.attachment.url)}" target="_blank" rel="noopener noreferrer">
+        <img class="message-image" src="${escapeHtml(message.attachment.url)}" alt="${escapeHtml(message.attachment.name)}" loading="lazy" />
+      </a>
     ` : message.attachment ? `
       <span class="bubble-attachment"><span class="file-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.5h6l4 4v11H5zM11 2.5v4h4M7.5 11h5M7.5 14h5" /></svg></span>
       <span class="file-details"><strong>${escapeHtml(message.attachment.name)}</strong><span>${escapeHtml(message.attachment.size)}</span></span></span>
     ` : messageText;
     return `${dateDivider}
       <div class="message-row ${isOutgoing ? "outgoing" : ""} ${message.call ? "call-log-row" : ""} ${hasMatch ? "has-search-match" : ""} ${isCurrentMatch ? "is-current-search-match" : ""}" data-message-index="${messageIndex}">
-        ${!isOutgoing ? `<span class="avatar message-avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""}">${escapeHtml(message.sender ? message.sender.slice(0, 1) : chat.initials)}</span>` : ""}
-        <span class="message-stack">${sender}<span class="bubble ${message.call ? "call-log-bubble-container" : ""}">${attachment}</span><span class="message-meta">${escapeHtml(message.time)}${isOutgoing && !message.call ? '<span class="read-check" aria-label="Read">✓✓</span>' : ""}</span>${!isOutgoing && message.id && !message.call ? `<button class="message-report-button" type="button" data-report-message-id="${escapeHtml(message.id)}">Report</button>` : ""}</span>
+        ${!isOutgoing ? `<span class="avatar message-avatar ${escapeHtml(chat.avatar)} ${chat.group ? "group-avatar" : ""}">${avatarContent(message.sender ? message.sender.slice(0, 1) : chat.initials, message.senderAvatarUrl || chat.avatarUrl)}</span>` : ""}
+        <span class="message-stack">${sender}<span class="bubble ${message.call ? "call-log-bubble-container" : ""} ${message.attachment?.url ? "image-bubble" : ""}">${attachment}</span><span class="message-meta">${escapeHtml(message.time)}${isOutgoing && !message.call ? '<span class="read-check" aria-label="Read">✓✓</span>' : ""}</span>${!isOutgoing && message.id && !message.call ? `<button class="message-report-button" type="button" data-report-message-id="${escapeHtml(message.id)}">Report</button>` : ""}</span>
       </div>`;
   }).join("");
   renderMessageSearchCount();
@@ -381,7 +438,7 @@ function updateChatContactDetails() {
   const chat = activeChat();
   if (!chat) return;
   document.querySelector("#chatContactAvatar").className = `new-chat-avatar ${chat.avatar}`;
-  document.querySelector("#chatContactAvatar").textContent = chat.initials;
+  document.querySelector("#chatContactAvatar").innerHTML = avatarContent(chat.initials, chat.avatarUrl);
   document.querySelector("#chatContactTitle").textContent = chat.name;
   document.querySelector("#chatContactPhone").textContent = chat.phone || (chat.self ? "Your personal chat" : chat.group ? `${chat.status}${chat.community ? " · Community" : " · Group"}` : "Chatter contact");
   document.querySelector("#chatContactDescription").textContent = chat.description || (chat.phone
@@ -881,6 +938,7 @@ async function toggleScreenShare() {
   }
 }
 function selectChat(id) {
+  if (activeId !== id) clearPendingImage();
   activeId = id;
   const chat = activeChat();
   if (!chat) return;
@@ -906,18 +964,35 @@ function showToast(message) {
 
 async function sendMessage(text, attachment) {
   const cleanText = text.trim();
-  if (!cleanText && !attachment) return;
+  if (!cleanText && !attachment) return false;
   const chat = activeChat();
-  if (!chat) return;
+  if (!chat) return false;
   try {
+    const image = attachment ? await readImageFile(attachment) : null;
     await apiRequest(`/api/chats/${chat.id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ text: cleanText, attachment })
+      body: JSON.stringify({ text: cleanText, attachment: image })
     });
-    await refreshChats();
   } catch (error) {
     showToast(error.message);
+    return false;
   }
+  try {
+    await refreshChats();
+  } catch (error) {
+    console.error("The message was sent but conversations did not refresh:", error);
+    showToast("Message sent. Refresh Chatter to reload the conversation.");
+  }
+  return true;
+}
+
+function clearPendingImage() {
+  if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+  pendingImage = null;
+  pendingImageUrl = "";
+  document.querySelector("#attachmentPreview").hidden = true;
+  document.querySelector("#attachmentPreviewImage").removeAttribute("src");
+  document.querySelector("#fileInput").value = "";
 }
 
 function openGroupDialog(type) {
@@ -1051,9 +1126,12 @@ searchInput.addEventListener("input", () => {
 messageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = messageInput.value;
-  if (!text.trim()) return;
-  messageInput.value = "";
-  await sendMessage(text);
+  if (!text.trim() && !pendingImage) return;
+  const sent = await sendMessage(text, pendingImage);
+  if (sent) {
+    messageInput.value = "";
+    clearPendingImage();
+  }
   messageInput.focus();
 });
 
@@ -1140,10 +1218,181 @@ document.querySelector("#settingsButton").addEventListener("click", () => {
   document.querySelector("#settingsName").value = profile?.name || "";
   document.querySelector("#settingsEmail").value = profile?.email || "";
   document.querySelector("#settingsPhone").value = profile?.phone || "";
+  document.querySelector("#chatShareLink").value = profile?.shareToken
+    ? `${window.location.origin}${window.location.pathname}?chat=${profile.shareToken}`
+    : "";
   document.querySelector("#settingsError").textContent = "";
   document.querySelector("#settingsDialog").hidden = false;
   document.querySelector("#settingsName").focus();
+  loadForeignNumberStore().catch((error) => {
+    const status = document.querySelector("#numberSubscriptionStatus");
+    status.textContent = error.message;
+    status.hidden = false;
+  });
 });
+
+document.querySelector("#chooseProfilePhotoButton").addEventListener("click", () => {
+  document.querySelector("#profilePhotoInput").click();
+});
+document.querySelector("#profilePhotoInput").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    showToast("Choose a JPEG, PNG, or WebP photo.");
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast("Photos must be 5 MB or smaller.");
+    return;
+  }
+  const button = document.querySelector("#chooseProfilePhotoButton");
+  button.disabled = true;
+  button.textContent = "Uploading…";
+  try {
+    const image = await readImageFile(file);
+    const result = await apiRequest("/api/profile/avatar", {
+      method: "PATCH",
+      body: JSON.stringify(image)
+    });
+    profile = result.user;
+    applyProfile();
+    try {
+      await refreshChats();
+    } catch (error) {
+      console.error("Profile photo saved but conversations did not refresh:", error);
+      showToast("Photo saved. Refresh Chatter to update it in conversations.");
+      return;
+    }
+    showToast("Your profile photo has been updated.");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Change";
+  }
+});
+
+document.querySelector("#copyChatLinkButton").addEventListener("click", async () => {
+  const linkInput = document.querySelector("#chatShareLink");
+  if (!linkInput.value) {
+    showToast("Your chat link is not available yet.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(linkInput.value);
+    showToast("Chat link copied. Share it with the person you want to message.");
+  } catch (error) {
+    linkInput.focus();
+    linkInput.select();
+    showToast("Clipboard access is unavailable. The link is selected so you can copy it.");
+  }
+});
+
+async function loadForeignNumberStore() {
+  const details = document.querySelector("#numberSubscriptionDetails");
+  const list = document.querySelector("#foreignNumberList");
+  const status = document.querySelector("#numberSubscriptionStatus");
+  status.hidden = true;
+  status.textContent = "";
+  const result = await apiRequest("/api/numbers");
+  const subscription = result.subscription;
+  if (subscription) {
+    const nextPayment = subscription.nextPaymentAt
+      ? new Date(subscription.nextPaymentAt).toLocaleDateString()
+      : "being confirmed";
+    details.innerHTML = `
+      <div class="number-subscription-card">
+        <strong>${escapeHtml(subscription.phone)}</strong>
+        <span>${escapeHtml(subscription.country)} · ${escapeHtml(subscription.status === "active" ? "Active" : "Payment needs attention")}</span>
+        <span>${subscription.cancelAtPeriodEnd ? "Cancels at the end of the paid period" : `Next payment: ${escapeHtml(nextPayment)}`}</span>
+        ${!subscription.cancelAtPeriodEnd
+          ? `<button class="profile-photo-button" type="button" id="cancelNumberSubscriptionButton">Cancel renewal</button>`
+          : ""}
+      </div>
+    `;
+  } else {
+    details.innerHTML = `<p class="dialog-description">No foreign Chatter number is assigned to your account.</p>`;
+  }
+  if (!result.numbers.length) {
+    list.innerHTML = `<p class="dialog-description">No foreign numbers are available right now.</p>`;
+    return;
+  }
+  const price = new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: result.currency,
+    maximumFractionDigits: 0
+  }).format(result.price / 100);
+  list.innerHTML = result.numbers.map((number) => `
+    <div class="foreign-number-option">
+      <span><strong>${escapeHtml(number.phone)}</strong><small>${escapeHtml(number.country)} · ${escapeHtml(price)} per month</small></span>
+      ${result.checkoutEnabled && !subscription
+        ? `<button class="profile-photo-button" type="button" data-buy-number="${escapeHtml(number.id)}">Buy</button>`
+        : ""}
+    </div>
+  `).join("");
+  if (!result.checkoutEnabled) {
+    status.textContent = "Live payment is not set up yet. Please check back later.";
+    status.hidden = false;
+  }
+}
+
+document.querySelector("#foreignNumberList").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-buy-number]");
+  if (!button) return;
+  button.disabled = true;
+  button.textContent = "Connecting to Paystack…";
+  try {
+    const result = await apiRequest("/api/numbers/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ numberId: button.dataset.buyNumber })
+    });
+    window.location.assign(result.authorizationUrl);
+  } catch (error) {
+    showToast(error.message);
+    await loadForeignNumberStore();
+  }
+});
+
+document.querySelector("#numberSubscriptionDetails").addEventListener("click", async (event) => {
+  if (event.target.id !== "cancelNumberSubscriptionButton") return;
+  if (!window.confirm("Stop future monthly charges? Your number will remain assigned until the paid period ends.")) return;
+  const button = event.target;
+  button.disabled = true;
+  try {
+    await apiRequest("/api/numbers/cancel", { method: "POST" });
+    await loadForeignNumberStore();
+    showToast("Monthly renewal has been cancelled.");
+  } catch (error) {
+    showToast(error.message);
+    button.disabled = false;
+  }
+});
+
+async function verifyPaystackNumberReturn() {
+  const currentUrl = new URL(window.location.href);
+  if (currentUrl.searchParams.get("payment") !== "number-subscription") return;
+  const reference = currentUrl.searchParams.get("reference") || "";
+  currentUrl.searchParams.delete("payment");
+  currentUrl.searchParams.delete("reference");
+  window.history.replaceState({}, "", currentUrl);
+  try {
+    const result = await apiRequest("/api/numbers/verify", {
+      method: "POST",
+      body: JSON.stringify({ reference })
+    });
+    if (result.verified) {
+      showToast("Payment verified. Your Chatter number is now assigned.");
+      await loadForeignNumberStore();
+      await refreshChats();
+    }
+  } catch (error) {
+    showToast(`Number payment was not verified: ${error.message}`);
+    const status = document.querySelector("#numberSubscriptionStatus");
+    status.textContent = `Payment was not verified: ${error.message}`;
+    status.hidden = false;
+  }
+}
 
 async function signOut() {
   if (!window.confirm("Log out of Chatter on this device?")) return;
@@ -1282,10 +1531,25 @@ document.querySelector("#attachButton").addEventListener("click", () => document
 document.querySelector("#fileInput").addEventListener("change", (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  const size = file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-  showToast("Files are not uploaded to the server yet. Send a text message instead.");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    showToast("Choose a JPEG, PNG, or WebP photo.");
+    event.target.value = "";
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast("Photos must be 5 MB or smaller.");
+    event.target.value = "";
+    return;
+  }
+  clearPendingImage();
+  pendingImage = file;
+  pendingImageUrl = URL.createObjectURL(file);
+  document.querySelector("#attachmentPreviewImage").src = pendingImageUrl;
+  document.querySelector("#attachmentPreview").hidden = false;
   event.target.value = "";
+  messageInput.focus();
 });
+document.querySelector("#removeAttachmentButton").addEventListener("click", clearPendingImage);
 
 document.querySelector("#emojiButton").addEventListener("click", () => {
   emojiPopover.hidden = !emojiPopover.hidden;
@@ -1400,6 +1664,10 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
     error.textContent = "Enter a valid phone number with 7 to 15 digits.";
     return;
   }
+  if (!phoneDigits.startsWith("234")) {
+    error.textContent = "Use a Nigerian phone number beginning with +234.";
+    return;
+  }
   const nextProfile = { name, email, phone: phoneInput };
   try {
     const result = await apiRequest("/api/profile", {
@@ -1460,6 +1728,10 @@ registerForm.addEventListener("submit", async (event) => {
     error.textContent = "Enter a valid phone number with 7 to 15 digits.";
     return;
   }
+  if (countryCode !== "+234") {
+    error.textContent = "Use a Nigerian phone number to register.";
+    return;
+  }
   const password = document.querySelector("#registerPassword").value;
   await requestRegistrationCode({ name, email, password, phone: `${countryCode}${phoneDigits}` });
 });
@@ -1485,6 +1757,7 @@ verificationForm.addEventListener("submit", async (event) => {
     pendingRegistration = null;
     verificationForm.hidden = true;
     openChatApp();
+    await openSharedChatFromUrl();
     subscribeToChatUpdates();
     if (!result.welcomeEmailSent) showToast("Your account is ready, but the welcome email could not be sent.");
   } catch (requestError) {
@@ -1564,6 +1837,7 @@ loginForm.addEventListener("submit", async (event) => {
     chats = result.chats;
     activeId = chats[0]?.id || null;
     openChatApp();
+    await openSharedChatFromUrl();
     subscribeToChatUpdates();
   } catch (requestError) {
     error.textContent = requestError.message;
@@ -1580,6 +1854,26 @@ async function refreshChats() {
   renderChatList();
   renderNewChatContacts();
   renderMessages();
+}
+
+async function openSharedChatFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("chat");
+  if (!token) return;
+  if (!/^[a-f0-9]{48}$/.test(token)) {
+    showToast("This chat link is not valid.");
+    return;
+  }
+  try {
+    const result = await apiRequest(`/api/chats/link/${token}`, { method: "POST" });
+    if (!chats.some((chat) => chat.id === result.chat.id)) chats.unshift(result.chat);
+    selectChat(result.chat.id);
+    params.delete("chat");
+    const query = params.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  } catch (error) {
+    showToast(`Could not open the shared chat: ${error.message}`);
+  }
 }
 
 function subscribeToChatUpdates() {
@@ -1617,6 +1911,12 @@ async function startApp() {
   renderChatList();
   renderMessages();
   try {
+    try {
+      loadCountryCallingCodes();
+    } catch (error) {
+      document.querySelector("#registerError").textContent = `Could not load international calling codes: ${error.message}`;
+      throw error;
+    }
     const result = await apiRequest("/api/session");
     if (!result.user) {
       profile = null;
@@ -1631,6 +1931,8 @@ async function startApp() {
     activeId = chats[0]?.id || null;
     openChatApp();
     subscribeToChatUpdates();
+    await openSharedChatFromUrl();
+    await verifyPaystackNumberReturn();
   } catch (error) {
     if (!error.message.includes("log in")) {
       showToast(`Could not connect to Chatter: ${error.message}`);

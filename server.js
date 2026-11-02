@@ -1,11 +1,16 @@
 const { createHash, createHmac, randomBytes, randomInt, scrypt: scryptCallback, timingSafeEqual } = require("node:crypto");
-const { promisify } = require("node:util");
+const { parseEnv, promisify } = require("node:util");
 const { createServer } = require("node:http");
 const { existsSync, readFileSync, statSync } = require("node:fs");
 const { extname, join, normalize } = require("node:path");
+const { getCountries, getCountryCallingCode, isValidPhoneNumber } = require("libphonenumber-js");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
+const envFile = join(root, ".env");
+if (existsSync(envFile)) {
+  Object.assign(process.env, parseEnv(readFileSync(envFile, "utf8")));
+}
 const supabaseProjectId = process.env.SUPABASE_PROJECT_ID;
 const supabaseUrl = process.env.SUPABASE_URL || (supabaseProjectId ? `https://${supabaseProjectId}.supabase.co` : "");
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -98,6 +103,10 @@ const maxVerificationAttempts = 5;
 const callRingLifetime = 60 * 1000;
 const callLifetime = 4 * 60 * 60 * 1000;
 const maxRequestBytes = 1024 * 1024;
+const maxImageBytes = 5 * 1024 * 1024;
+const mediaBucket = "chatter-media";
+const numberSubscriptionAmount = 1000000;
+const numberSubscriptionCurrency = "NGN";
 const moderatorPassword = process.env.CHATTER_MODERATOR_PASSWORD || "";
 const moderatorPasswordHash = createHash("sha256").update(moderatorPassword).digest();
 let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
@@ -141,17 +150,28 @@ function parseCookies(header = "") {
   }).filter(([key]) => key));
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = maxRequestBytes) {
   let raw = "";
   for await (const chunk of request) {
     raw += chunk;
-    if (Buffer.byteLength(raw) > maxRequestBytes) throw new HttpError(413, "Request is too large.");
+    if (Buffer.byteLength(raw) > maxBytes) throw new HttpError(413, "Request is too large.");
   }
   try {
     return raw ? JSON.parse(raw) : {};
   } catch {
     throw new HttpError(400, "Request body must be valid JSON.");
   }
+}
+
+async function readRawBody(request, maxBytes = maxRequestBytes) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) throw new HttpError(413, "Request is too large.");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 function cleanText(value, label, maxLength) {
@@ -168,8 +188,141 @@ function normalizePhone(value) {
   return `+${digits}`;
 }
 
+function requireNigerianPhone(phone) {
+  if (!phone.startsWith("+234") || !isValidPhoneNumber(phone, "NG")) {
+    throw new HttpError(400, "Use a Nigerian phone number beginning with +234 to register or update your account.");
+  }
+  return phone;
+}
+
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, phone: user.phone };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    chatterNumber: user.chatter_phone || user.phone,
+    avatarUrl: user.avatar_path ? `/api/avatars/${user.id}` : "",
+    shareToken: user.share_token
+  };
+}
+
+async function getPublicUser(userId) {
+  return database.prepare(`
+    SELECT u.id, u.name, u.email, u.phone, u.avatar_path, u.share_token,
+      assigned.phone AS chatter_phone
+    FROM users u
+    LEFT JOIN number_subscriptions ns
+      ON ns.user_id = u.id AND ns.status = 'active'
+      AND (ns.next_payment_at IS NULL OR ns.next_payment_at > now())
+    LEFT JOIN foreign_numbers assigned
+      ON assigned.id = ns.number_id AND assigned.assigned_user_id = u.id
+    WHERE u.id = ?
+  `).get(userId);
+}
+
+function imagePayload(input) {
+  if (!input || typeof input !== "object") throw new HttpError(400, "Choose an image to upload.");
+  const mimeType = input.type;
+  const base64 = input.data;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType) || typeof base64 !== "string") {
+    throw new HttpError(400, "Choose a JPEG, PNG, or WebP image.");
+  }
+  if (base64.length > Math.ceil(maxImageBytes / 3) * 4 + 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) {
+    throw new HttpError(413, "Images must be 5 MB or smaller.");
+  }
+  const bytes = Buffer.from(base64, "base64");
+  if (!bytes.length || bytes.length > maxImageBytes || bytes.toString("base64") !== base64) {
+    throw new HttpError(413, "Images must be 5 MB or smaller.");
+  }
+  const isJpeg = mimeType === "image/jpeg" && bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng = mimeType === "image/png" && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const isWebp = mimeType === "image/webp" && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+  if (!isJpeg && !isPng && !isWebp) throw new HttpError(400, "The selected file is not a valid JPEG, PNG, or WebP image.");
+  const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.slice("image/".length);
+  return { bytes, mimeType, extension };
+}
+
+function imageSize(bytes) {
+  return bytes.length < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes.length / 1024))} KB`
+    : `${(bytes.length / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function storageObjectUrl(path) {
+  return `${supabaseUrl}/storage/v1/object/${mediaBucket}/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+async function uploadMediaObject(path, bytes, mimeType, upsert = false) {
+  const result = await fetch(storageObjectUrl(path), {
+    method: "POST",
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": mimeType,
+      "x-upsert": String(upsert)
+    },
+    body: bytes
+  });
+  if (!result.ok) {
+    const details = await result.text();
+    console.error("Supabase image upload failed:", result.status, details);
+    throw new HttpError(502, "Image storage is unavailable. Please try again.");
+  }
+}
+
+async function removeMediaObject(path) {
+  const result = await fetch(storageObjectUrl(path), {
+    method: "DELETE",
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`
+    }
+  });
+  if (!result.ok) {
+    const details = await result.text();
+    console.error("Supabase image cleanup failed:", result.status, details);
+  }
+}
+
+async function readMediaObject(path) {
+  const result = await fetch(`${supabaseUrl}/storage/v1/object/authenticated/${mediaBucket}/${path.split("/").map(encodeURIComponent).join("/")}`, {
+    headers: {
+      apikey: supabaseServiceRoleKey,
+      Authorization: `Bearer ${supabaseServiceRoleKey}`
+    }
+  });
+  if (!result.ok) {
+    const details = await result.text();
+    console.error("Supabase image read failed:", result.status, details);
+    throw new HttpError(result.status === 404 ? 404 : 502, result.status === 404 ? "Image not found." : "Image storage is unavailable.");
+  }
+  return Buffer.from(await result.arrayBuffer());
+}
+
+function avatarUrl(userId, avatarPath) {
+  return avatarPath ? `/api/avatars/${userId}` : "";
+}
+
+async function servePrivateImage(response, path, mimeType) {
+  const bytes = await readMediaObject(path);
+  response.writeHead(200, {
+    "Content-Type": mimeType,
+    "Content-Length": bytes.length,
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin"
+  });
+  response.end(bytes);
+}
+
+function countryCallingCodes() {
+  const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+  return getCountries().map((country) => ({
+    country,
+    name: displayNames.of(country) || country,
+    callingCode: `+${getCountryCallingCode(country)}`
+  })).sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function escapeEmailHtml(value) {
@@ -229,6 +382,173 @@ function getPublicUrl() {
     throw new Error("CHATTER_PUBLIC_URL must use HTTPS.");
   }
   return url.toString();
+}
+
+function getPaystackCallbackUrl(request, reference) {
+  const configuredUrl = getPublicUrl();
+  let baseUrl = configuredUrl;
+  if (!baseUrl) {
+    const host = request.headers.host || "";
+    if (!/^(localhost|127\.0\.0\.1)(:\d{1,5})?$/i.test(host)) {
+      throw new HttpError(503, "Set CHATTER_PUBLIC_URL on the server before starting a Paystack checkout.");
+    }
+    baseUrl = `http://${host}`;
+  }
+  const callbackUrl = new URL("/", baseUrl);
+  callbackUrl.searchParams.set("payment", "number-subscription");
+  callbackUrl.searchParams.set("reference", reference);
+  return callbackUrl.toString();
+}
+
+function getPaystackLiveSecret() {
+  const secret = process.env.PAYSTACK_SECRET_KEY || "";
+  if (!secret) throw new HttpError(503, "Live checkout is not configured. Set PAYSTACK_SECRET_KEY in Render to your Paystack live secret.");
+  if (!/^sk_live_[A-Za-z0-9]+$/.test(secret)) {
+    throw new HttpError(503, "PAYSTACK_SECRET_KEY must be a live secret beginning with sk_live_. Test keys cannot be used to buy a number.");
+  }
+  return secret;
+}
+
+function getPaystackPlanCode() {
+  const planCode = process.env.PAYSTACK_PLAN_CODE || "";
+  if (!/^PLN_[A-Za-z0-9]+$/.test(planCode)) {
+    throw new HttpError(503, "Set PAYSTACK_PLAN_CODE to your Paystack monthly NGN plan code before enabling subscriptions.");
+  }
+  return planCode;
+}
+
+async function callPaystack(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`https://api.paystack.co${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${getPaystackLiveSecret()}`,
+        "Content-Type": "application/json",
+        ...options.headers
+      },
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(502, "Could not reach Paystack. Please try again.");
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new HttpError(502, "Paystack returned an unreadable response. Please try again.");
+  }
+  if (!payload || !response.ok || payload.status !== true) {
+    throw new HttpError(502, typeof payload?.message === "string" ? `Paystack: ${payload.message}` : "Paystack could not complete the request.");
+  }
+  return payload.data;
+}
+
+function nextMonthlyPaymentDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (!value) date.setDate(date.getDate() + 30);
+  return Number.isNaN(date.getTime()) ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : date.toISOString();
+}
+
+async function applyInitialNumberPayment(reference, payment) {
+  const order = await database.prepare(`
+    SELECT ns.id, ns.user_id, ns.number_id, ns.status, u.email, n.phone, n.status AS number_status,
+      n.assigned_user_id
+    FROM number_subscriptions ns
+    JOIN users u ON u.id = ns.user_id
+    JOIN foreign_numbers n ON n.id = ns.number_id
+    WHERE ns.reference = ?
+  `).get(reference);
+  if (!order) throw new HttpError(404, "Number subscription checkout was not found.");
+  if (order.status === "active") return order.user_id;
+  if (!["pending", "expired"].includes(order.status)) throw new HttpError(409, "This number checkout is no longer active.");
+  if (order.status === "expired" && order.number_status !== "available") {
+    throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
+  }
+  if (
+    payment.reference !== reference ||
+    payment.status !== "success" ||
+    payment.amount !== numberSubscriptionAmount ||
+    payment.currency !== numberSubscriptionCurrency ||
+    String(payment.customer?.email || "").toLowerCase() !== order.email.toLowerCase()
+  ) {
+    throw new HttpError(400, "Paystack has not verified the expected 10,000 NGN monthly payment for this account.");
+  }
+  if (order.number_status === "assigned" && order.assigned_user_id !== order.user_id) {
+    throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
+  }
+  const subscription = payment.subscription || {};
+  const subscriptionCode = subscription.subscription_code || payment.subscription_code || null;
+  const emailToken = subscription.email_token || payment.email_token || null;
+  if (order.number_status !== "assigned") {
+    const assigned = await database.prepare(`
+      UPDATE foreign_numbers
+      SET status = 'assigned', assigned_user_id = ?, reserved_until = NULL
+      WHERE id = ? AND status IN ('available', 'reserved')
+    `).run(order.user_id, order.number_id);
+    if (!assigned.changes) {
+      const currentAssignment = await database.prepare(`
+        SELECT assigned_user_id FROM foreign_numbers WHERE id = ? AND status = 'assigned'
+      `).get(order.number_id);
+      if (currentAssignment?.assigned_user_id !== order.user_id) {
+        throw new HttpError(409, "The selected number is no longer available. Contact support about your payment.");
+      }
+    }
+  }
+  const nextPaymentAt = nextMonthlyPaymentDate(subscription.next_payment_date);
+  await database.prepare(`
+    UPDATE number_subscriptions
+    SET status = 'active',
+      paystack_subscription_code = COALESCE(?, paystack_subscription_code),
+      paystack_email_token = COALESCE(?, paystack_email_token),
+      next_payment_at = ?, updated_at = now()
+    WHERE id = ? AND status IN ('pending', 'expired')
+  `).run(subscriptionCode, emailToken, nextPaymentAt, order.id);
+  await database.prepare(`
+    INSERT INTO number_subscription_payments (reference, subscription_id, amount, currency, status, paid_at)
+    VALUES (?, ?, ?, ?, 'success', now())
+    ON CONFLICT(reference) DO NOTHING
+  `).run(reference, order.id, numberSubscriptionAmount, numberSubscriptionCurrency);
+  await sendUserChatUpdates(order.user_id);
+  return order.user_id;
+}
+
+async function applyRecurringNumberPayment(payment) {
+  const subscriptionCode = payment.subscription?.subscription_code || payment.subscription_code;
+  if (!subscriptionCode) throw new HttpError(400, "Paystack renewal event does not include its subscription code.");
+  const subscription = await database.prepare(`
+    SELECT ns.id, ns.user_id, ns.number_id, ns.status, ns.next_payment_at, u.email, n.assigned_user_id
+    FROM number_subscriptions ns
+    JOIN users u ON u.id = ns.user_id
+    JOIN foreign_numbers n ON n.id = ns.number_id
+    WHERE ns.paystack_subscription_code = ?
+  `).get(subscriptionCode);
+  if (!subscription) return;
+  if (
+    payment.status !== "success" ||
+    payment.amount !== numberSubscriptionAmount ||
+    payment.currency !== numberSubscriptionCurrency ||
+    String(payment.customer?.email || "").toLowerCase() !== subscription.email.toLowerCase()
+  ) {
+    throw new HttpError(400, "Paystack renewal does not match the account's 10,000 NGN subscription.");
+  }
+  if (subscription.assigned_user_id !== subscription.user_id) {
+    throw new HttpError(409, "The subscribed number is no longer assigned to its customer.");
+  }
+  const recorded = await database.prepare(`
+    INSERT INTO number_subscription_payments (reference, subscription_id, amount, currency, status, paid_at)
+    VALUES (?, ?, ?, ?, 'success', now())
+    ON CONFLICT(reference) DO NOTHING
+  `).run(payment.reference, subscription.id, numberSubscriptionAmount, numberSubscriptionCurrency);
+  if (!recorded.changes) return;
+  const nextPaymentAt = nextMonthlyPaymentDate(payment.subscription?.next_payment_date);
+  await database.prepare(`
+    UPDATE number_subscriptions
+    SET status = 'active', next_payment_at = ?, updated_at = now()
+    WHERE id = ?
+  `).run(nextPaymentAt, subscription.id);
+  await sendUserChatUpdates(subscription.user_id);
 }
 
 function welcomeEmail(name) {
@@ -388,24 +708,38 @@ async function chatSummary(chatId, viewerId) {
   const chat = await database.prepare("SELECT * FROM chats WHERE id = ?").get(chatId);
   if (!chat) return null;
   const memberships = await database.prepare(`
-    SELECT cm.user_id AS id, cm.display_name, u.name, u.phone
+    SELECT cm.user_id AS id, cm.display_name, u.name,
+      COALESCE(assigned.phone, CASE WHEN u.phone LIKE '+234%' THEN u.phone END) AS phone, u.avatar_path
     FROM chat_members cm JOIN users u ON u.id = cm.user_id
+    LEFT JOIN number_subscriptions ns
+      ON ns.user_id = u.id AND ns.status = 'active'
+      AND (ns.next_payment_at IS NULL OR ns.next_payment_at > now())
+    LEFT JOIN foreign_numbers assigned
+      ON assigned.id = ns.number_id AND assigned.assigned_user_id = u.id
     WHERE cm.chat_id = ?
   `).all(chatId);
   const self = memberships.find((member) => member.id === viewerId);
   if (!self) return null;
   const messageRows = (await database.prepare(`
-    SELECT m.*, u.name AS sender_name FROM messages m
+    SELECT m.*, u.name AS sender_name, u.avatar_path AS sender_avatar_path FROM messages m
     JOIN users u ON u.id = m.sender_id
     WHERE m.chat_id = ?
   `).all(chatId)).map((item) => ({
     id: item.id,
     from: item.sender_id === viewerId ? "you" : "them",
     ...(chat.type === "group" || chat.type === "community" ? { sender: item.sender_name } : {}),
+    ...(chat.type === "group" || chat.type === "community" ? { senderAvatarUrl: avatarUrl(item.sender_id, item.sender_avatar_path) } : {}),
     text: item.text,
     createdAt: item.created_at,
     time: new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    ...(item.attachment_name ? { attachment: { name: item.attachment_name, size: item.attachment_size } } : {})
+    ...(item.attachment_name ? {
+      attachment: {
+        name: item.attachment_name,
+        size: item.attachment_size,
+        ...(item.attachment_mime ? { type: item.attachment_mime } : {}),
+        ...(item.attachment_path ? { url: `/api/chats/${chatId}/media/${item.id}` } : {})
+      }
+    } : {})
   }));
   const callRows = (await database.prepare(`
     SELECT * FROM call_history WHERE chat_id = ?
@@ -446,9 +780,10 @@ async function chatSummary(chatId, viewerId) {
     name: displayName,
     initials,
     avatar: chat.type === "self" ? "avatar-you" : chat.type === "group" ? "avatar-team" : chat.type === "community" ? "avatar-design" : "avatar-marcus",
+    avatarUrl: chat.type === "direct" ? avatarUrl(other.id, other.avatar_path) : "",
     online: chat.type === "direct" && isUserOnline(other.id),
-    status: chat.type === "direct" ? other.phone : chat.type === "self" ? "Message yourself" : `${members.length + 1} members`,
-    ...(chat.type === "direct" ? { phone: other.phone, contactId: other.id } : {}),
+    status: chat.type === "direct" ? contact ? other.phone : "Chatter contact" : chat.type === "self" ? "Message yourself" : `${members.length + 1} members`,
+    ...(chat.type === "direct" ? { ...(contact ? { phone: other.phone } : {}), contactId: other.id } : {}),
     unread: 0,
     group: chat.type === "group" || chat.type === "community",
     community: chat.type === "community",
@@ -527,6 +862,11 @@ async function sendChatUpdate(chatId) {
   for (const member of members) publish(member.user_id, { type: "chats", chats: await getUserChats(member.user_id) });
 }
 
+async function sendUserChatUpdates(userId) {
+  const chats = await database.prepare("SELECT chat_id FROM chat_members WHERE user_id = ?").all(userId);
+  for (const { chat_id: chatId } of chats) await sendChatUpdate(chatId);
+}
+
 async function publishPresenceUpdates(userId) {
   publish(userId, { type: "chats", chats: await getUserChats(userId) });
   const contacts = await database.prepare(`
@@ -544,12 +884,109 @@ async function publishPresenceUpdates(userId) {
 async function handleApi(request, response, url) {
   const route = `${request.method} ${url.pathname}`;
 
+  if (route === "POST /api/paystack/webhook") {
+    const rawBody = await readRawBody(request);
+    const signature = request.headers["x-paystack-signature"];
+    if (typeof signature !== "string" || !/^[a-f0-9]{128}$/i.test(signature)) {
+      throw new HttpError(401, "Invalid Paystack webhook signature.");
+    }
+    const expected = createHmac("sha512", getPaystackLiveSecret()).update(rawBody).digest();
+    const supplied = Buffer.from(signature, "hex");
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+      throw new HttpError(401, "Invalid Paystack webhook signature.");
+    }
+    let event;
+    try {
+      event = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      throw new HttpError(400, "Paystack webhook payload must be valid JSON.");
+    }
+    const payment = event.data || {};
+    if (event.event === "charge.success") {
+      if (typeof payment.reference === "string" && payment.reference.startsWith("chatter_number_")) {
+        await applyInitialNumberPayment(payment.reference, payment);
+      } else if (payment.subscription?.subscription_code || payment.subscription_code) {
+        await applyRecurringNumberPayment(payment);
+      }
+    } else if (event.event === "subscription.create") {
+      const email = String(payment.customer?.email || "").toLowerCase();
+      const subscriptionCode = payment.subscription_code || payment.code;
+      const emailToken = payment.email_token;
+      if (email && typeof subscriptionCode === "string" && typeof emailToken === "string") {
+        const row = await database.prepare(`
+          SELECT ns.id, ns.user_id
+          FROM number_subscriptions ns JOIN users u ON u.id = ns.user_id
+          WHERE lower(u.email) = ? AND ns.status IN ('pending', 'active')
+            AND ns.paystack_subscription_code IS NULL
+          ORDER BY ns.created_at DESC LIMIT 1
+        `).get(email);
+        if (row) {
+          await database.prepare(`
+            UPDATE number_subscriptions
+            SET paystack_subscription_code = ?, paystack_email_token = ?,
+              next_payment_at = COALESCE(?, next_payment_at), updated_at = now()
+            WHERE id = ?
+          `).run(subscriptionCode, emailToken, payment.next_payment_date || null, row.id);
+        }
+      }
+    } else if (event.event === "invoice.payment_failed") {
+      const subscriptionCode = payment.subscription?.subscription_code || payment.subscription_code;
+      if (subscriptionCode) {
+        const row = await database.prepare("SELECT user_id FROM number_subscriptions WHERE paystack_subscription_code = ?").get(subscriptionCode);
+        if (row) {
+          await database.prepare(`
+            UPDATE number_subscriptions SET status = 'past_due', updated_at = now()
+            WHERE paystack_subscription_code = ?
+          `).run(subscriptionCode);
+          await sendUserChatUpdates(row.user_id);
+        }
+      }
+    } else if (event.event === "subscription.not_renew") {
+      const subscriptionCode = payment.subscription_code || payment.code;
+      if (subscriptionCode) {
+        await database.prepare(`
+          UPDATE number_subscriptions
+          SET cancel_at_period_end = true, updated_at = now()
+          WHERE paystack_subscription_code = ?
+        `).run(subscriptionCode);
+      }
+    } else if (event.event === "subscription.disable") {
+      const subscriptionCode = payment.subscription_code || payment.code;
+      if (subscriptionCode) {
+        const row = await database.prepare(`
+          SELECT id, user_id, number_id, next_payment_at
+          FROM number_subscriptions WHERE paystack_subscription_code = ?
+        `).get(subscriptionCode);
+        if (row) {
+          if (row.next_payment_at && new Date(row.next_payment_at).getTime() > Date.now()) {
+            await database.prepare(`
+              UPDATE number_subscriptions SET cancel_at_period_end = true, updated_at = now()
+              WHERE id = ?
+            `).run(row.id);
+          } else {
+            await database.prepare(`
+              UPDATE number_subscriptions SET status = 'ended', updated_at = now() WHERE id = ?
+            `).run(row.id);
+            await database.prepare(`
+              UPDATE foreign_numbers SET status = 'available', assigned_user_id = NULL
+              WHERE id = ? AND assigned_user_id = ?
+            `).run(row.number_id, row.user_id);
+            await sendUserChatUpdates(row.user_id);
+          }
+        }
+      }
+    }
+    return respond(response, 200, { received: true });
+  }
+
+  if (route === "GET /api/countries") return respond(response, 200, { countries: countryCallingCodes() });
+
   if (route === "POST /api/register/send-code") {
     if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
     const input = await readJson(request);
     const name = cleanText(input.name, "Name", 40);
     const email = cleanText(input.email, "Email", 254).toLowerCase();
-    const phone = normalizePhone(input.phone);
+    const phone = requireNigerianPhone(normalizePhone(input.phone));
     const password = typeof input.password === "string" ? input.password : "";
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
@@ -594,6 +1031,7 @@ async function handleApi(request, response, url) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
     const pending = await database.prepare("SELECT * FROM pending_registrations WHERE email = ?").get(email);
     if (!pending) throw new HttpError(400, "No active verification request was found. Return to registration and request a new code.");
+    requireNigerianPhone(pending.phone);
     const now = Date.now();
     if (pending.expires_at <= now) {
       await database.prepare("DELETE FROM pending_registrations WHERE email = ?").run(email);
@@ -615,10 +1053,11 @@ async function handleApi(request, response, url) {
     }
 
     const id = randomBytes(16).toString("hex");
+    const shareToken = randomBytes(24).toString("hex");
     const createdAt = new Date(now).toISOString();
     await database.transaction(async (transaction) => {
-      await transaction.prepare("INSERT INTO users (id, name, email, phone, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
-        id, pending.name, email, pending.phone, pending.password_hash, pending.password_salt, createdAt
+      await transaction.prepare("INSERT INTO users (id, name, email, phone, share_token, password_hash, password_salt, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+        id, pending.name, email, pending.phone, shareToken, pending.password_hash, pending.password_salt, createdAt
       );
       await recordUserActivity(id, "account.created", {}, transaction);
       await transaction.prepare("DELETE FROM pending_registrations WHERE email = ?").run(email);
@@ -633,7 +1072,7 @@ async function handleApi(request, response, url) {
       console.error("Welcome email delivery failed:", error.message);
     }
     return respond(response, 201, {
-      user: publicUser({ id, name: pending.name, email, phone: pending.phone }),
+      user: publicUser({ id, name: pending.name, email, phone: pending.phone, share_token: shareToken }),
       chats: [],
       welcomeEmailSent
     });
@@ -681,6 +1120,55 @@ async function handleApi(request, response, url) {
     await recordAdminAccess("signed_out");
     await clearSession(request, response);
     return respond(response, 200, { ok: true, wasModerator: current.role === "moderator" });
+  }
+
+  if (route === "GET /api/moderation/numbers") {
+    await requireModerator(request, response);
+    const numbers = await database.prepare(`
+      SELECT n.id, n.phone, n.country, n.status, n.created_at AS "createdAt",
+        u.name AS "assignedUserName", u.email AS "assignedUserEmail",
+        ns.status AS "subscriptionStatus", ns.next_payment_at AS "nextPaymentAt"
+      FROM foreign_numbers n
+      LEFT JOIN users u ON u.id = n.assigned_user_id
+      LEFT JOIN number_subscriptions ns
+        ON ns.number_id = n.id AND ns.user_id = n.assigned_user_id
+        AND ns.status IN ('active', 'past_due')
+      ORDER BY n.created_at DESC
+    `).all();
+    return respond(response, 200, { numbers });
+  }
+
+  if (route === "POST /api/moderation/numbers") {
+    await requireModerator(request, response);
+    const input = await readJson(request);
+    const phone = normalizePhone(input.phone);
+    const country = cleanText(input.country, "Country", 80);
+    if (phone.startsWith("+234")) throw new HttpError(400, "Only non-Nigerian numbers can be added as purchasable numbers.");
+    if (!isValidPhoneNumber(phone)) throw new HttpError(400, "Enter a valid international phone number.");
+    if (country.length < 2) throw new HttpError(400, "Enter the number's country.");
+    const id = randomBytes(16).toString("hex");
+    try {
+      await database.prepare(`
+        INSERT INTO foreign_numbers (id, phone, country, status)
+        VALUES (?, ?, ?, 'available')
+      `).run(id, phone, country);
+    } catch (error) {
+      if (error.code === "23505") throw new HttpError(409, "That number is already in the inventory.");
+      throw error;
+    }
+    await recordAdminAccess("number_added", id);
+    return respond(response, 201, { number: { id, phone, country, status: "available" } });
+  }
+
+  const moderationNumberRoute = url.pathname.match(/^\/api\/moderation\/numbers\/([a-f0-9]{32})$/);
+  if (moderationNumberRoute && request.method === "DELETE") {
+    await requireModerator(request, response);
+    const result = await database.prepare(`
+      DELETE FROM foreign_numbers WHERE id = ? AND status = 'available'
+    `).run(moderationNumberRoute[1]);
+    if (!result.changes) throw new HttpError(409, "Only available, unassigned numbers can be removed.");
+    await recordAdminAccess("number_removed", moderationNumberRoute[1]);
+    return respond(response, 200, { removed: true });
   }
 
   if (route === "GET /api/moderation/overview") {
@@ -820,7 +1308,7 @@ async function handleApi(request, response, url) {
     const phonePattern = phoneDigits ? `%${phoneDigits}%` : null;
     const reports = await database.prepare(`
       SELECT r.id, r.chat_id, r.message_id, r.reason, r.status, r.created_at,
-        m.text AS message_text, m.attachment_name,
+        m.text AS message_text, m.attachment_name, m.attachment_path,
         sender.name AS sender_name, sender.phone AS sender_phone,
         reporter.name AS reporter_name, reporter.phone AS reporter_phone,
         CASE WHEN c.type IN ('group', 'community') THEN c.name
@@ -851,12 +1339,30 @@ async function handleApi(request, response, url) {
       createdAt: report.created_at,
       messageText: report.message_text,
       attachmentName: report.attachment_name,
+      attachmentMediaUrl: report.attachment_path ? `/api/moderation/reports/${report.id}/image` : "",
       senderName: report.sender_name,
       senderPhone: report.sender_phone,
       reporterName: report.reporter_name,
       reporterPhone: report.reporter_phone,
       conversation: report.conversation
     })) });
+  }
+
+  const moderationImageRoute = url.pathname.match(/^\/api\/moderation\/reports\/([a-f0-9]+)\/image$/);
+  if (moderationImageRoute && request.method === "GET") {
+    await requireModerator(request, response);
+    const reportId = moderationImageRoute[1];
+    const report = await database.prepare(`
+      SELECT m.attachment_path, m.attachment_mime
+      FROM message_reports r JOIN messages m ON m.id = r.message_id
+      WHERE r.id = ?
+    `).get(reportId);
+    if (!report?.attachment_path) throw new HttpError(404, "Reported image not found.");
+    await database.prepare("INSERT INTO moderation_audit (id, report_id, actor_id, action, created_at) VALUES (?, ?, 'moderator', 'viewed_attachment', ?)").run(
+      randomBytes(16).toString("hex"), reportId, new Date().toISOString()
+    );
+    await recordAdminAccess("report_attachment_viewed", reportId);
+    return servePrivateImage(response, report.attachment_path, report.attachment_mime);
   }
 
   if (route === "GET /api/moderation/audit") {
@@ -893,11 +1399,216 @@ async function handleApi(request, response, url) {
   if (route === "GET /api/session" || route === "GET /api/me") {
     const session = await findSession(request, response);
     if (!session || session.role !== "user") return respond(response, 200, { user: null, chats: [] });
-    const user = await database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId);
-    return respond(response, 200, { user, chats: await getUserChats(session.userId) });
+    const user = await getPublicUser(session.userId);
+    return respond(response, 200, { user: publicUser(user), chats: await getUserChats(session.userId) });
   }
 
   const session = await requireSession(request, response);
+  if (route === "GET /api/numbers") {
+    await database.prepare(`
+      UPDATE foreign_numbers
+      SET status = 'available', reserved_until = NULL
+      WHERE status = 'reserved' AND reserved_until <= now()
+    `).run();
+    await database.prepare(`
+      UPDATE number_subscriptions SET status = 'expired', updated_at = now()
+      WHERE status = 'pending' AND created_at <= now() - interval '30 minutes'
+    `).run();
+    const expiredSubscriptions = await database.prepare(`
+      SELECT id, user_id, number_id, cancel_at_period_end AS "cancelAtPeriodEnd"
+      FROM number_subscriptions
+      WHERE next_payment_at <= now()
+        AND (status = 'active' OR (status = 'past_due' AND cancel_at_period_end = true))
+    `).all();
+    for (const expired of expiredSubscriptions) {
+      const nextStatus = expired.cancelAtPeriodEnd ? "cancelled" : "past_due";
+      await database.prepare(`
+        UPDATE number_subscriptions SET status = ?, updated_at = now() WHERE id = ? AND status = 'active'
+      `).run(nextStatus, expired.id);
+      if (expired.cancelAtPeriodEnd) {
+        await database.prepare(`
+          UPDATE foreign_numbers SET status = 'available', assigned_user_id = NULL
+          WHERE id = ? AND assigned_user_id = ?
+        `).run(expired.number_id, expired.user_id);
+      }
+      await sendUserChatUpdates(expired.user_id);
+    }
+    const numbers = await database.prepare(`
+      SELECT id, phone, country FROM foreign_numbers
+      WHERE status = 'available' ORDER BY country, phone
+    `).all();
+    const subscription = await database.prepare(`
+      SELECT ns.status, ns.cancel_at_period_end AS "cancelAtPeriodEnd",
+        ns.next_payment_at AS "nextPaymentAt", n.phone, n.country
+      FROM number_subscriptions ns
+      JOIN foreign_numbers n ON n.id = ns.number_id
+      WHERE ns.user_id = ? AND ns.status IN ('active', 'past_due')
+      ORDER BY ns.created_at DESC LIMIT 1
+    `).get(session.userId);
+    const checkoutEnabled = /^sk_live_[A-Za-z0-9]+$/.test(process.env.PAYSTACK_SECRET_KEY || "")
+      && /^PLN_[A-Za-z0-9]+$/.test(process.env.PAYSTACK_PLAN_CODE || "");
+    return respond(response, 200, {
+      numbers,
+      subscription: subscription || null,
+      price: numberSubscriptionAmount,
+      currency: numberSubscriptionCurrency,
+      checkoutEnabled
+    });
+  }
+
+  if (route === "POST /api/numbers/subscribe") {
+    const input = await readJson(request);
+    getPaystackLiveSecret();
+    const planCode = getPaystackPlanCode();
+    const user = await database.prepare("SELECT email FROM users WHERE id = ?").get(session.userId);
+    if (!user?.email) throw new HttpError(401, "Please log in to continue.");
+    const existing = await database.prepare(`
+      SELECT id FROM number_subscriptions
+      WHERE user_id = ? AND status IN ('pending', 'active', 'past_due')
+        AND (status != 'active' OR next_payment_at IS NULL OR next_payment_at > now())
+      LIMIT 1
+    `).get(session.userId);
+    if (existing) throw new HttpError(409, "You already have an active number subscription or a checkout in progress.");
+    const numberId = typeof input.numberId === "string" ? input.numberId : "";
+    if (!/^[a-f0-9]{32}$/.test(numberId)) throw new HttpError(400, "Choose an available foreign number.");
+    const number = await database.prepare(`
+      SELECT id FROM foreign_numbers WHERE id = ? AND status = 'available'
+    `).get(numberId);
+    if (!number) throw new HttpError(409, "That number is no longer available. Refresh the list and choose another.");
+    const subscriptionId = randomBytes(16).toString("hex");
+    const reference = `chatter_number_${randomBytes(16).toString("hex")}`;
+    const reserved = await database.prepare(`
+      UPDATE foreign_numbers
+      SET status = 'reserved', reserved_until = ?
+      WHERE id = ? AND status = 'available'
+    `).run(new Date(Date.now() + 30 * 60 * 1000).toISOString(), numberId);
+    if (!reserved.changes) throw new HttpError(409, "That number was just reserved by another customer.");
+    try {
+      await database.prepare(`
+        INSERT INTO number_subscriptions
+          (id, user_id, number_id, reference, status, amount, currency)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?)
+      `).run(subscriptionId, session.userId, numberId, reference, numberSubscriptionAmount, numberSubscriptionCurrency);
+      const data = await callPaystack("/transaction/initialize", {
+        method: "POST",
+        body: JSON.stringify({
+          email: user.email,
+          plan: planCode,
+          reference,
+          callback_url: getPaystackCallbackUrl(request, reference),
+          metadata: { purpose: "chatter_number_subscription", number_subscription_id: subscriptionId }
+        })
+      });
+      if (!data || typeof data.authorization_url !== "string") {
+        throw new HttpError(502, "Paystack returned an invalid checkout response.");
+      }
+      let authorizationUrl;
+      try {
+        authorizationUrl = new URL(data.authorization_url);
+      } catch {
+        throw new HttpError(502, "Paystack returned an invalid checkout response.");
+      }
+      if (data.reference !== reference || authorizationUrl.protocol !== "https:" || authorizationUrl.hostname !== "checkout.paystack.com") {
+        throw new HttpError(502, "Paystack returned an invalid checkout response.");
+      }
+      return respond(response, 200, { authorizationUrl: authorizationUrl.toString() });
+    } catch (error) {
+      try {
+        await database.prepare(`
+          UPDATE number_subscriptions SET status = 'expired', updated_at = now()
+          WHERE id = ? AND status = 'pending'
+        `).run(subscriptionId);
+        await database.prepare(`
+          UPDATE foreign_numbers SET status = 'available', reserved_until = NULL
+          WHERE id = ? AND status = 'reserved'
+        `).run(numberId);
+      } catch (releaseError) {
+        console.error("Could not release a failed number checkout reservation:", releaseError.message);
+      }
+      throw error;
+    }
+  }
+
+  if (route === "POST /api/numbers/verify") {
+    const input = await readJson(request);
+    const reference = typeof input.reference === "string" ? input.reference : "";
+    if (!/^chatter_number_[a-f0-9]{32}$/.test(reference)) {
+      throw new HttpError(400, "Invalid number subscription reference.");
+    }
+    const transaction = await database.prepare(`
+      SELECT reference, status FROM number_subscriptions
+      WHERE reference = ? AND user_id = ?
+    `).get(reference, session.userId);
+    if (!transaction) throw new HttpError(404, "Number subscription checkout was not found.");
+    if (transaction.status === "active") return respond(response, 200, { verified: true });
+    const payment = await callPaystack(`/transaction/verify/${encodeURIComponent(reference)}`);
+    await applyInitialNumberPayment(reference, payment);
+    return respond(response, 200, { verified: true });
+  }
+
+  if (route === "POST /api/numbers/cancel") {
+    const subscription = await database.prepare(`
+      SELECT id, paystack_subscription_code, paystack_email_token
+      FROM number_subscriptions
+      WHERE user_id = ? AND status IN ('active', 'past_due') AND cancel_at_period_end = false
+      ORDER BY created_at DESC LIMIT 1
+    `).get(session.userId);
+    if (!subscription) throw new HttpError(404, "No active number subscription needs cancellation.");
+    if (!subscription.paystack_subscription_code || !subscription.paystack_email_token) {
+      throw new HttpError(409, "Paystack is still setting up recurring billing. Try again shortly.");
+    }
+    await callPaystack("/subscription/disable", {
+      method: "POST",
+      body: JSON.stringify({
+        code: subscription.paystack_subscription_code,
+        token: subscription.paystack_email_token
+      })
+    });
+    await database.prepare(`
+      UPDATE number_subscriptions
+      SET cancel_at_period_end = true, updated_at = now()
+      WHERE id = ?
+    `).run(subscription.id);
+    return respond(response, 200, { cancelled: true });
+  }
+
+  const avatarRoute = url.pathname.match(/^\/api\/avatars\/([a-f0-9]+)$/);
+  if (avatarRoute && request.method === "GET") {
+    const user = await database.prepare("SELECT avatar_path FROM users WHERE id = ?").get(avatarRoute[1]);
+    if (!user?.avatar_path) throw new HttpError(404, "Profile photo not found.");
+    return servePrivateImage(response, user.avatar_path, extname(user.avatar_path).toLowerCase() === ".png"
+      ? "image/png"
+      : extname(user.avatar_path).toLowerCase() === ".webp" ? "image/webp" : "image/jpeg");
+  }
+
+  const chatMediaRoute = url.pathname.match(/^\/api\/chats\/([a-f0-9]+)\/media\/([a-f0-9]+)$/);
+  if (chatMediaRoute && request.method === "GET") {
+    const [, chatId, messageId] = chatMediaRoute;
+    await ensureMember(chatId, session.userId);
+    const message = await database.prepare("SELECT attachment_path, attachment_mime FROM messages WHERE id = ? AND chat_id = ?").get(messageId, chatId);
+    if (!message?.attachment_path) throw new HttpError(404, "Image not found.");
+    return servePrivateImage(response, message.attachment_path, message.attachment_mime);
+  }
+
+  if (route === "PATCH /api/profile/avatar") {
+    const input = await readJson(request, Math.ceil(maxImageBytes / 3) * 4 + 16 * 1024);
+    const image = imagePayload(input);
+    const oldProfile = await database.prepare("SELECT avatar_path FROM users WHERE id = ?").get(session.userId);
+    const objectPath = `profiles/${session.userId}/${randomBytes(12).toString("hex")}.${image.extension}`;
+    await uploadMediaObject(objectPath, image.bytes, image.mimeType);
+    try {
+      await database.prepare("UPDATE users SET avatar_path = ? WHERE id = ?").run(objectPath, session.userId);
+    } catch (error) {
+      await removeMediaObject(objectPath);
+      throw error;
+    }
+    if (oldProfile?.avatar_path) await removeMediaObject(oldProfile.avatar_path);
+    await recordUserActivity(session.userId, "profile.photo.updated");
+    await sendUserChatUpdates(session.userId);
+    const user = await getPublicUser(session.userId);
+    return respond(response, 200, { user: publicUser(user) });
+  }
+
   if (route === "GET /api/rtc-config") return respond(response, 200, { iceServers });
 
   if (route === "POST /api/calls") {
@@ -1038,8 +1749,14 @@ async function handleApi(request, response, url) {
 
   if (route === "GET /api/contacts") {
     const contacts = await database.prepare(`
-      SELECT u.id, c.display_name AS name, u.phone, u.email
+      SELECT u.id, c.display_name AS name,
+        COALESCE(assigned.phone, CASE WHEN u.phone LIKE '+234%' THEN u.phone END) AS phone, u.email
       FROM contacts c JOIN users u ON u.id = c.contact_id
+      LEFT JOIN number_subscriptions ns
+        ON ns.user_id = u.id AND ns.status = 'active'
+        AND (ns.next_payment_at IS NULL OR ns.next_payment_at > now())
+      LEFT JOIN foreign_numbers assigned
+        ON assigned.id = ns.number_id AND assigned.assigned_user_id = u.id
       WHERE c.owner_id = ? ORDER BY c.display_name COLLATE NOCASE
     `).all(session.userId);
     return respond(response, 200, { contacts });
@@ -1050,7 +1767,18 @@ async function handleApi(request, response, url) {
     const name = cleanText(input.name, "Name", 40);
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     const phone = normalizePhone(input.phone);
-    const contact = await database.prepare("SELECT id, name, email, phone FROM users WHERE phone = ?").get(phone);
+    const contact = await database.prepare(`
+      SELECT u.id, u.name, u.email,
+        COALESCE(assigned.phone, CASE WHEN u.phone LIKE '+234%' THEN u.phone END) AS phone
+      FROM users u
+      LEFT JOIN number_subscriptions ns
+        ON ns.user_id = u.id AND ns.status = 'active'
+        AND (ns.next_payment_at IS NULL OR ns.next_payment_at > now())
+      LEFT JOIN foreign_numbers assigned
+        ON assigned.id = ns.number_id AND assigned.assigned_user_id = u.id
+      WHERE (u.phone = ? AND u.phone LIKE '+234%') OR assigned.phone = ?
+      LIMIT 1
+    `).get(phone, phone);
     if (!contact) throw new HttpError(404, "No Chatter account uses that phone number yet.");
     if (contact.id === session.userId) throw new HttpError(400, "You cannot add your own number as a contact.");
     await database.prepare("INSERT INTO contacts (owner_id, contact_id, display_name) VALUES (?, ?, ?) ON CONFLICT(owner_id, contact_id) DO UPDATE SET display_name = excluded.display_name").run(session.userId, contact.id, name);
@@ -1069,6 +1797,32 @@ async function handleApi(request, response, url) {
     }
     await sendChatUpdate(chat.id);
     return respond(response, 201, { chat: await chatSummary(chat.id, session.userId) });
+  }
+
+  const sharedChatRoute = url.pathname.match(/^\/api\/chats\/link\/([a-f0-9]{48})$/);
+  if (sharedChatRoute && request.method === "POST") {
+    const target = await database.prepare("SELECT id FROM users WHERE share_token = ?").get(sharedChatRoute[1]);
+    if (!target) throw new HttpError(404, "This chat link is no longer available.");
+    if (target.id === session.userId) throw new HttpError(400, "This is your own chat link.");
+    let chat = await database.prepare(`
+      SELECT c.id FROM chats c
+      JOIN chat_members a ON a.chat_id = c.id
+      JOIN chat_members b ON b.chat_id = c.id
+      WHERE c.type = 'direct' AND a.user_id = ? AND b.user_id = ?
+    `).get(session.userId, target.id);
+    if (!chat) {
+      const id = randomBytes(16).toString("hex");
+      const createdAt = new Date().toISOString();
+      await database.transaction(async (transaction) => {
+        await transaction.prepare("INSERT INTO chats (id, type, created_by, created_at) VALUES (?, 'direct', ?, ?)").run(id, session.userId, createdAt);
+        await transaction.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)").run(id, session.userId);
+        await transaction.prepare("INSERT INTO chat_members (chat_id, user_id) VALUES (?, ?)").run(id, target.id);
+      });
+      chat = { id };
+      await recordUserActivity(session.userId, "conversation.created", { type: "direct", method: "share-link" });
+    }
+    await sendChatUpdate(chat.id);
+    return respond(response, 200, { chat: await chatSummary(chat.id, session.userId) });
   }
 
   const messageReportRoute = url.pathname.match(/^\/api\/chats\/([a-f0-9]+)\/messages\/([a-f0-9]+)\/report$/);
@@ -1135,18 +1889,36 @@ async function handleApi(request, response, url) {
     if (request.method === "GET" && resource === "messages") return respond(response, 200, { chat: await chatSummary(chatId, session.userId) });
 
     if (request.method === "POST" && resource === "messages") {
-      const input = await readJson(request);
+      const input = await readJson(request, Math.ceil(maxImageBytes / 3) * 4 + 16 * 1024);
       const text = typeof input.text === "string" ? input.text.trim() : "";
-      const attachment = input.attachment && typeof input.attachment.name === "string"
-        ? { name: cleanText(input.attachment.name, "Attachment name", 180), size: cleanText(input.attachment.size || "", "Attachment size", 30) }
+      const attachment = input.attachment
+        ? { ...imagePayload(input.attachment), name: cleanText(input.attachment.name, "Image name", 180) }
         : null;
       if (!text && !attachment) throw new HttpError(400, "Write a message before sending.");
       if (text.length > 4000) throw new HttpError(400, "Messages must be 4,000 characters or fewer.");
       const createdAt = new Date().toISOString();
-      await database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(randomBytes(16).toString("hex"), chatId, session.userId, text, attachment?.name || null, attachment?.size || null, createdAt);
+      const messageId = randomBytes(16).toString("hex");
+      const attachmentPath = attachment ? `chats/${chatId}/${messageId}.${attachment.extension}` : null;
+      if (attachment) await uploadMediaObject(attachmentPath, attachment.bytes, attachment.mimeType);
+      try {
+        await database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, attachment_path, attachment_mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+          messageId,
+          chatId,
+          session.userId,
+          text,
+          attachment?.name || null,
+          attachment ? imageSize(attachment.bytes) : null,
+          attachmentPath,
+          attachment?.mimeType || null,
+          createdAt
+        );
+      } catch (error) {
+        if (attachmentPath) await removeMediaObject(attachmentPath);
+        throw error;
+      }
       await recordUserActivity(session.userId, "message.sent", { conversationType: chat.type, hasAttachment: Boolean(attachment) });
       await sendChatUpdate(chatId);
-      return respond(response, 201, { message: { from: "you", text, time: new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), ...(attachment ? { attachment } : {}) } });
+      return respond(response, 201, { ok: true });
     }
 
     if (request.method === "PATCH" && resource === "contact" && chat.type === "direct") {
@@ -1162,7 +1934,10 @@ async function handleApi(request, response, url) {
     }
 
     if (request.method === "DELETE" && resource === "messages") {
+      const attachmentPaths = (await database.prepare("SELECT attachment_path FROM messages WHERE chat_id = ? AND attachment_path IS NOT NULL").all(chatId))
+        .map((item) => item.attachment_path);
       await database.prepare("DELETE FROM messages WHERE chat_id = ?").run(chatId);
+      for (const path of attachmentPaths) await removeMediaObject(path);
       await recordUserActivity(session.userId, "conversation.cleared", { conversationType: chat.type });
       await sendChatUpdate(chatId);
       return respond(response, 200, { chat: await chatSummary(chatId, session.userId) });
@@ -1173,14 +1948,15 @@ async function handleApi(request, response, url) {
     const input = await readJson(request);
     const name = cleanText(input.name, "Name", 40);
     const email = cleanText(input.email, "Email", 254).toLowerCase();
-    const phone = normalizePhone(input.phone);
+    const phone = requireNigerianPhone(normalizePhone(input.phone));
     if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
     if (await database.prepare("SELECT 1 FROM users WHERE email = ? AND id != ?").get(email, session.userId)) throw new HttpError(409, "That email is already in use.");
     if (await database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(phone, session.userId)) throw new HttpError(409, "That phone number is already in use.");
     await database.prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?").run(name, email, phone, session.userId);
     await recordUserActivity(session.userId, "profile.updated");
-    return respond(response, 200, { user: publicUser(await database.prepare("SELECT id, name, email, phone FROM users WHERE id = ?").get(session.userId)) });
+    await sendUserChatUpdates(session.userId);
+    return respond(response, 200, { user: publicUser(await getPublicUser(session.userId)) });
   }
 
   throw new HttpError(404, "API route not found.");
