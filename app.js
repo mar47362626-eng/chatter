@@ -1293,21 +1293,39 @@ async function loadForeignNumberStore() {
   const details = document.querySelector("#numberSubscriptionDetails");
   const list = document.querySelector("#foreignNumberList");
   const status = document.querySelector("#numberSubscriptionStatus");
+  const panel = document.querySelector("#numberSubscriptionPanel");
   status.hidden = true;
   status.textContent = "";
-  const result = await apiRequest("/api/numbers");
+  panel.setAttribute("aria-busy", "true");
+  list.innerHTML = `
+    <div class="number-store-loading" aria-hidden="true">
+      <span></span><span></span>
+    </div>
+  `;
+  let result;
+  try {
+    result = await apiRequest("/api/numbers");
+  } catch (error) {
+    panel.setAttribute("aria-busy", "false");
+    list.innerHTML = `<div class="number-store-empty"><span aria-hidden="true">!</span><strong>Could not load numbers</strong><small>Check your connection and try again.</small></div>`;
+    throw error;
+  }
   const subscription = result.subscription;
   if (subscription) {
     const nextPayment = subscription.nextPaymentAt
       ? new Date(subscription.nextPaymentAt).toLocaleDateString()
       : "being confirmed";
     details.innerHTML = `
-      <div class="number-subscription-card">
+      <div class="number-subscription-card ${subscription.status === "active" ? "is-active" : "is-attention"}">
+        <div class="number-subscription-topline">
+          <span class="number-subscription-label">YOUR CHATTER NUMBER</span>
+          <span class="number-status-pill">${escapeHtml(subscription.status === "active" ? "Active" : "Payment due")}</span>
+        </div>
         <strong>${escapeHtml(subscription.phone)}</strong>
-        <span>${escapeHtml(subscription.country)} · ${escapeHtml(subscription.status === "active" ? "Active" : "Payment needs attention")}</span>
-        <span>${subscription.cancelAtPeriodEnd ? "Cancels at the end of the paid period" : `Next payment: ${escapeHtml(nextPayment)}`}</span>
+        <span>${escapeHtml(subscription.country)}${subscription.status === "active" ? ` · Renews ${escapeHtml(nextPayment)}` : " · Update your payment to keep this number active"}</span>
+        ${subscription.cancelAtPeriodEnd ? `<span class="number-cancel-note">Renewal cancelled · number remains active until ${escapeHtml(nextPayment)}</span>` : ""}
         ${!subscription.cancelAtPeriodEnd
-          ? `<button class="profile-photo-button" type="button" id="cancelNumberSubscriptionButton">Cancel renewal</button>`
+          ? `<button class="number-cancel-button" type="button" id="cancelNumberSubscriptionButton">Cancel renewal</button>`
           : ""}
       </div>
     `;
@@ -1315,7 +1333,8 @@ async function loadForeignNumberStore() {
     details.innerHTML = `<p class="dialog-description">No foreign Chatter number is assigned to your account.</p>`;
   }
   if (!result.numbers.length) {
-    list.innerHTML = `<p class="dialog-description">No foreign numbers are available right now.</p>`;
+    list.innerHTML = `<div class="number-store-empty"><span aria-hidden="true">◎</span><strong>No numbers available right now</strong><small>Please check back later.</small></div>`;
+    panel.setAttribute("aria-busy", "false");
     return;
   }
   const price = new Intl.NumberFormat("en-NG", {
@@ -1323,16 +1342,27 @@ async function loadForeignNumberStore() {
     currency: result.currency,
     maximumFractionDigits: 0
   }).format(result.price / 100);
-  list.innerHTML = result.numbers.map((number) => `
-    <div class="foreign-number-option">
-      <span><strong>${escapeHtml(number.phone)}</strong><small>${escapeHtml(number.country)} · ${escapeHtml(price)} per month</small></span>
-      ${result.checkoutEnabled && !subscription
-        ? `<button class="profile-photo-button" type="button" data-buy-number="${escapeHtml(number.id)}">Buy</button>`
-        : ""}
+  list.innerHTML = `
+    <div class="number-store-list-heading">
+      <span>AVAILABLE NUMBERS</span>
+      <span>${result.numbers.length} available</span>
     </div>
-  `).join("");
+    <div class="number-store-options">
+      ${result.numbers.map((number) => `
+        <article class="foreign-number-option">
+          <span class="foreign-number-mark" aria-hidden="true">＋</span>
+          <span class="foreign-number-copy"><strong>${escapeHtml(number.phone)}</strong><small>${escapeHtml(number.country)}</small></span>
+          <span class="foreign-number-price">${escapeHtml(price)}<small>/ month</small></span>
+          ${result.checkoutEnabled && !subscription
+            ? `<button class="foreign-number-buy" type="button" data-buy-number="${escapeHtml(number.id)}">Choose <span aria-hidden="true">→</span></button>`
+            : ""}
+        </article>
+      `).join("")}
+    </div>
+  `;
+  panel.setAttribute("aria-busy", "false");
   if (!result.checkoutEnabled) {
-    status.textContent = "Live payment is not set up yet. Please check back later.";
+    status.innerHTML = `<span class="number-status-icon" aria-hidden="true">!</span><span><strong>Checkout is temporarily unavailable</strong><small>Live payment is not configured yet. Please check back later.</small></span>`;
     status.hidden = false;
   }
 }
@@ -1359,6 +1389,7 @@ document.querySelector("#numberSubscriptionDetails").addEventListener("click", a
   if (!window.confirm("Stop future monthly charges? Your number will remain assigned until the paid period ends.")) return;
   const button = event.target;
   button.disabled = true;
+  button.textContent = "Cancelling…";
   try {
     await apiRequest("/api/numbers/cancel", { method: "POST" });
     await loadForeignNumberStore();
@@ -1366,6 +1397,7 @@ document.querySelector("#numberSubscriptionDetails").addEventListener("click", a
   } catch (error) {
     showToast(error.message);
     button.disabled = false;
+    button.textContent = "Cancel renewal";
   }
 });
 

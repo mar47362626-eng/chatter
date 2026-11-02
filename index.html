@@ -312,8 +312,11 @@
           <p class="dialog-description">Anyone with this link can start a Chatter conversation with you. It does not show your email or phone number.</p>
         </div>
         <div class="share-link-panel" id="numberSubscriptionPanel">
-          <span class="auth-label">International Chatter number</span>
-          <p class="dialog-description">Choose a foreign number to use as your Chatter contact number. It is assigned to your account after payment and only works for finding and messaging Chatter users; it does not receive phone calls or SMS.</p>
+          <div class="number-store-heading">
+            <span class="number-store-icon" aria-hidden="true">✦</span>
+            <span><span class="auth-label">International Chatter number</span><small>Make it easier for people abroad to find you</small></span>
+          </div>
+          <p class="dialog-description number-store-description">Choose a foreign number as your Chatter contact number. It is assigned to your account after payment and works for finding and messaging Chatter users—not external phone calls or SMS.</p>
           <div id="numberSubscriptionDetails"></div>
           <div id="foreignNumberList"></div>
           <p class="dialog-description" id="numberSubscriptionStatus" role="status" aria-live="polite" hidden></p>
@@ -436,6 +439,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="country-codes.js?v=20261101"></script>
-    <script src="app.js?v=20261102-live-number-subscriptions"></script>
+    <script src="app.js?v=20261102-number-store-design"></script>
   </body>
 </html>

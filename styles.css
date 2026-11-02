@@ -631,22 +631,60 @@ button { color: inherit; }
 .profile-photo-button { min-height: 34px; padding: 0 12px; border: 1px solid #dfe9e2; border-radius: 9px; background: #fff; color: #237b5d; cursor: pointer; font-size: 10px; font-weight: 700; }
 .profile-photo-button:hover { border-color: #9dcbb1; background: #f3faf5; }
 .share-link-panel { margin-top: 20px; padding-top: 17px; border-top: 1px solid #edf1ed; }
+#numberSubscriptionPanel { margin-top: 22px; padding-top: 19px; }
+.number-store-heading { display: flex; align-items: center; gap: 10px; }
+.number-store-icon { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border: 1px solid #d5eee0; border-radius: 10px; background: #f0faf4; color: #16835d; font-size: 15px; }
+.number-store-heading > span:last-child { display: grid; gap: 3px; }
+.number-store-heading .auth-label { margin: 0; color: #2e4237; font-size: 10px; }
+.number-store-heading small { color: #8a9690; font-size: 9px; }
+.number-store-description { max-width: 430px; margin: 10px 0 13px !important; color: #7d8b82; font-size: 10px !important; line-height: 1.65 !important; }
 .share-link-row { display: flex; align-items: center; gap: 8px; }
 .share-link-row .auth-input { min-width: 0; padding: 0 10px; }
 .share-link-panel .dialog-description { margin: 8px 0 0; font-size: 9px; line-height: 1.5; }
 .auth-hint { margin: 7px 0 0; color: #89968e; font-size: 10px; line-height: 1.5; }
-.foreign-number-option, .number-subscription-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; padding: 11px; border: 1px solid #e5ece7; border-radius: 10px; background: #fbfcfb; }
-.foreign-number-option > span { min-width: 0; }
-.foreign-number-option strong, .number-subscription-card strong { display: block; color: #25372d; font-size: 11px; }
-.foreign-number-option small, .number-subscription-card > span { display: block; margin-top: 4px; color: #89968e; font-size: 9px; line-height: 1.5; }
-.number-subscription-card { align-items: flex-start; flex-direction: column; }
-.number-subscription-card .profile-photo-button { align-self: flex-start; }
-#numberSubscriptionStatus:not(:empty) { margin-top: 10px; padding: 9px 10px; border-radius: 8px; background: #fdf2ed; color: #a5482b; font-size: 10px; overflow-wrap: anywhere; }
+.number-subscription-card { display: grid; gap: 7px; margin: 12px 0 14px; padding: 14px; border: 1px solid #cce8d7; border-radius: 13px; background: linear-gradient(135deg, #f3fbf5, #fff 75%); }
+.number-subscription-card.is-attention { border-color: #f1d8b7; background: #fffaf3; }
+.number-subscription-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.number-subscription-label, .number-store-list-heading { color: #829087; font-size: 8px; font-weight: 800; letter-spacing: 1px; }
+.number-subscription-card strong { color: #20372a; font-size: 17px; letter-spacing: .3px; }
+.number-subscription-card > span { color: #78877d; font-size: 9px; line-height: 1.5; }
+.number-status-pill { padding: 4px 8px; border-radius: 999px; background: #e5f5eb; color: #177d5c; font-size: 8px; font-weight: 800; }
+.is-attention .number-status-pill { background: #fff0d9; color: #95620e; }
+.number-cancel-note { color: #9a6a22 !important; }
+.number-cancel-button { justify-self: start; padding: 0; border: 0; background: transparent; color: #a14d43; cursor: pointer; font-size: 9px; font-weight: 700; }
+.number-cancel-button:hover { color: #81372e; text-decoration: underline; }
+.number-store-list-heading { display: flex; justify-content: space-between; margin: 14px 0 7px; }
+.number-store-list-heading span:last-child { font-weight: 500; letter-spacing: 0; }
+.number-store-options { display: grid; gap: 7px; }
+.foreign-number-option { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 10px; border: 1px solid #e7eee9; border-radius: 12px; background: #fff; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.foreign-number-option:hover { transform: translateY(-1px); border-color: #b7ddc6; box-shadow: 0 5px 16px #173a250b; }
+.foreign-number-mark { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 9px; background: #f0f7f2; color: #26835e; font-size: 15px; }
+.foreign-number-copy { min-width: 0; }
+.foreign-number-copy strong { display: block; overflow: hidden; color: #2a3d32; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.foreign-number-copy small { display: block; margin-top: 3px; color: #89968e; font-size: 8px; }
+.foreign-number-price { color: #293d32; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.foreign-number-price small { display: block; margin-top: 2px; color: #89968e; font-size: 8px; font-weight: 500; text-align: right; }
+.foreign-number-buy { min-height: 31px; padding: 0 9px; border-radius: 8px; background: #17895f; color: #fff; font-size: 9px; }
+.foreign-number-buy:hover { background: #116f4c; }
+.foreign-number-buy span { margin-left: 3px; }
+.number-store-empty { display: grid; justify-items: center; gap: 5px; padding: 18px 10px; border: 1px dashed #dfe9e2; border-radius: 12px; background: #fbfdfb; text-align: center; }
+.number-store-empty > span { color: #50a47b; font-size: 20px; }
+.number-store-empty strong { color: #48594e; font-size: 10px; }
+.number-store-empty small { color: #89968e; font-size: 9px; }
+.number-store-loading { display: grid; gap: 7px; }
+.number-store-loading span { height: 48px; border: 1px solid #edf1ed; border-radius: 11px; background: linear-gradient(90deg, #f5f8f6 25%, #fff 50%, #f5f8f6 75%); background-size: 200% 100%; animation: number-store-shimmer 1.3s linear infinite; }
+@keyframes number-store-shimmer { to { background-position: -200% 0; } }
+#numberSubscriptionStatus:not(:empty) { display: flex; align-items: center; gap: 9px; margin-top: 11px; padding: 10px 11px; border: 1px solid #f4e3d6; border-radius: 10px; background: #fff8f2; color: #a5482b; font-size: 9px; line-height: 1.5; }
+.number-status-icon { display: grid; width: 19px; height: 19px; flex: 0 0 19px; place-items: center; border-radius: 50%; background: #ffeadb; color: #a5482b; font-size: 11px; font-weight: 800; }
+#numberSubscriptionStatus strong, #numberSubscriptionStatus small { display: block; }
+#numberSubscriptionStatus small { margin-top: 2px; color: #987665; font-size: 8px; }
 
 @media (max-width: 760px) {
   .attachment-preview { left: 12px; }
   .profile-photo-editor { gap: 9px; padding: 10px; }
   .profile-photo-copy small { max-width: 145px; }
+  .foreign-number-option { grid-template-columns: 29px minmax(0, 1fr) auto; }
+  .foreign-number-buy { grid-column: 2 / -1; justify-self: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
