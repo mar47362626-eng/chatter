@@ -1963,7 +1963,8 @@ async function handleApi(request, response, url) {
 }
 
 function serveStatic(request, response, url) {
-  let requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+  const pathname = url.pathname === "/moderation" ? "/moderation.html" : url.pathname;
+  let requestedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
   requestedPath = normalize(requestedPath).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
   const filePath = join(root, requestedPath);
   if (!filePath.startsWith(root) || !existsSync(filePath) || !statSync(filePath).isFile()) {
