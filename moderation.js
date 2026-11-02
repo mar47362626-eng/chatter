@@ -53,6 +53,18 @@ async function api(path, options = {}) {
   return result;
 }
 
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-password-toggle]");
+  if (!button) return;
+  const input = document.getElementById(button.getAttribute("aria-controls"));
+  if (!input) return;
+  const showPassword = input.type === "password";
+  input.type = showPassword ? "text" : "password";
+  button.textContent = showPassword ? "Hide" : "Show";
+  button.setAttribute("aria-label", `${showPassword ? "Hide" : "Show"} password`);
+  button.setAttribute("aria-pressed", String(showPassword));
+});
+
 function showLogin() {
   dashboard.hidden = true;
   loginPanel.hidden = false;

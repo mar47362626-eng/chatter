@@ -53,7 +53,10 @@
             <label class="auth-label" for="registerEmail">Email address</label>
             <input class="auth-input" id="registerEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" maxlength="254" required />
             <label class="auth-label" for="registerPassword">Password</label>
-            <input class="auth-input" id="registerPassword" name="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" maxlength="128" required />
+            <div class="password-field">
+              <input class="auth-input" id="registerPassword" name="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" minlength="8" maxlength="128" required />
+              <button class="password-toggle" type="button" data-password-toggle aria-controls="registerPassword" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
             <label class="auth-label" for="registerPhone">Nigerian phone number</label>
             <div class="phone-input">
               <select id="countryCode" name="countryCode" aria-label="Country calling code">
@@ -90,7 +93,10 @@
             <label class="auth-label" for="loginEmail">Email address</label>
             <input class="auth-input" id="loginEmail" type="email" autocomplete="email" maxlength="254" required />
             <label class="auth-label" for="loginPassword">Password</label>
-            <input class="auth-input" id="loginPassword" type="password" autocomplete="current-password" maxlength="128" required />
+            <div class="password-field">
+              <input class="auth-input" id="loginPassword" type="password" autocomplete="current-password" maxlength="128" required />
+              <button class="password-toggle" type="button" data-password-toggle aria-controls="loginPassword" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
             <p class="auth-terms">Chatter records account and feature-use metadata for administration, including messages sent and call participants/outcomes. It does not record private message contents or chat viewing, and admins cannot access call audio/video.</p>
             <p class="auth-field-error" id="loginError" role="alert"></p>
             <button class="auth-submit" type="submit">Log in <span aria-hidden="true">→</span></button>

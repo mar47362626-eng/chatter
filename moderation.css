@@ -23,6 +23,11 @@ h2 { font-size: 18px; }
 .login-panel .description { margin: 11px 0 22px; }
 form label, .toolbar label { display: block; margin: 12px 0 7px; color: #435149; font-size: 12px; font-weight: 700; }
 input, select { width: 100%; min-height: 42px; padding: 0 11px; border: 1px solid #dfe8e1; border-radius: 9px; background: #fff; color: #17241f; }
+.password-field { position: relative; width: 100%; }
+.password-field input { padding-right: 68px; }
+.password-field .password-toggle { position: absolute; top: 50%; right: 7px; width: auto; min-height: 30px; margin: 0; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: #177d5c; font-size: 11px; transform: translateY(-50%); }
+.password-field .password-toggle:hover { background: #eaf6ef; }
+.password-field .password-toggle:focus-visible { outline: 2px solid #83c9aa; outline-offset: 1px; }
 .number-length-hint { display: block; margin-top: 6px; color: #829087; font-size: 10px; line-height: 1.5; }
 button { min-height: 40px; padding: 0 16px; border: 0; border-radius: 9px; background: #1c9a70; color: #fff; cursor: pointer; font-size: 12px; font-weight: 700; }
 button:hover { background: #177d5c; }

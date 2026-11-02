@@ -18,7 +18,10 @@
       <p class="description">Manage account and usage metadata, call history, system status, and reported messages. Message images are available only when that message has been reported; call media is never shown here.</p>
       <form id="moderatorLoginForm">
         <label for="moderatorPassword">Admin password</label>
-        <input id="moderatorPassword" type="password" autocomplete="current-password" required />
+        <div class="password-field">
+          <input id="moderatorPassword" type="password" autocomplete="current-password" required />
+          <button class="password-toggle" type="button" data-password-toggle aria-controls="moderatorPassword" aria-label="Show password" aria-pressed="false">Show</button>
+        </div>
         <p id="loginError" class="error" role="alert"></p>
         <button type="submit">Sign in</button>
       </form>
