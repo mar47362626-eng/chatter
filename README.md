@@ -100,18 +100,16 @@ This local setup does not send SMS verification codes or upload file contents. B
 
 ## Render deployment
 
-The GitHub Pages URL serves static files only; it cannot run this Node.js server or real-time calls. Deploy Chatter as a Render Web Service connected to this repository, with the build command `npm install` and start command `npm start`. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor.
+The GitHub Pages URL and a static Cloudflare Pages deployment serve files only; they cannot run this Node.js server or real-time calls. To deploy the full app on Render, create a new **Blueprint** from this repository and Render will use [`render.yaml`](./render.yaml) to build and start the web service. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor.
 
-Configure these Render environment variables:
+When prompted during Blueprint setup, provide these private environment variables:
 
-- `HOST=0.0.0.0`
-- `NODE_ENV=production`
 - `SUPABASE_PROJECT_ID` set to the project reference from the Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` set to the project service-role key (server-side secret)
 - `CHATTER_MODERATOR_PASSWORD` set through Render's secret environment-variable settings to a unique password of at least 20 characters
-- `CHATTER_ICE_SERVERS` with your production STUN/TURN configuration; TURN is needed for reliable calls across restrictive networks
 - `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for verified registration and welcome emails
-- `CHATTER_PUBLIC_URL` set to the HTTPS URL Render assigns to the deployed service, for the welcome-email button
+
+The Blueprint sets `HOST=0.0.0.0`, `NODE_ENV=production`, and Node.js 22.13.0. After the first deployment, set `CHATTER_PUBLIC_URL` to the HTTPS URL Render assigns to the service. Optionally configure `CHATTER_ICE_SERVERS` with your production STUN/TURN settings; TURN is needed for reliable calls across restrictive networks. Paystack variables are needed only if you enable paid Chatter numbers.
 
 Chatter stores data in Supabase PostgreSQL; it does not need a Render disk for the database. Existing SQLite data is not automatically imported—this Supabase setup starts fresh. Never add production secrets to GitHub or browser code.
 
