@@ -143,6 +143,7 @@ const searchInput = document.querySelector("#searchInput");
 const emojiPopover = document.querySelector("#emojiPopover");
 const toast = document.querySelector("#toast");
 const authScreen = document.querySelector("#authScreen");
+const landingScreen = document.querySelector("#landingScreen");
 const registerForm = document.querySelector("#registerForm");
 const verificationForm = document.querySelector("#verificationForm");
 const loginForm = document.querySelector("#loginForm");
@@ -152,6 +153,31 @@ const newChatView = document.querySelector("#newChatView");
 const newChatSearchInput = document.querySelector("#newChatSearchInput");
 let newChatQuery = "";
 let groupType = "group";
+
+function showAuthScreen(mode = "register") {
+  landingScreen.hidden = true;
+  authScreen.hidden = false;
+  document.body.classList.remove("landing-mode");
+  registerForm.hidden = mode !== "register";
+  verificationForm.hidden = true;
+  loginForm.hidden = mode !== "login";
+  document.querySelector("#registerError").textContent = "";
+  document.querySelector("#loginError").textContent = "";
+  document.querySelector(mode === "login" ? "#loginEmail" : "#registerName").focus();
+}
+
+function showLandingScreen() {
+  appShell.hidden = true;
+  authScreen.hidden = true;
+  landingScreen.hidden = false;
+  document.body.classList.add("landing-mode");
+}
+
+for (const buttonId of ["landingGetStarted", "heroGetStarted", "privacyGetStarted"]) {
+  document.querySelector(`#${buttonId}`).addEventListener("click", () => showAuthScreen("register"));
+}
+document.querySelector("#landingLogin").addEventListener("click", () => showAuthScreen("login"));
+document.querySelector("#returnHomeButton").addEventListener("click", showLandingScreen);
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
@@ -268,7 +294,9 @@ function applyProfile() {
 
 function openChatApp() {
   applyProfile();
+  landingScreen.hidden = true;
   authScreen.hidden = true;
+  document.body.classList.remove("landing-mode");
   appShell.hidden = false;
 }
 
@@ -1472,7 +1500,7 @@ async function signOut() {
   activeId = null;
   closeOptionsMenu();
   appShell.hidden = true;
-  authScreen.hidden = false;
+  showLandingScreen();
   registerForm.hidden = false;
   verificationForm.hidden = true;
   loginForm.hidden = true;
@@ -1986,7 +2014,7 @@ async function startApp() {
       chats = [];
       activeId = null;
       appShell.hidden = true;
-      authScreen.hidden = false;
+      showLandingScreen();
       return;
     }
     profile = result.user;
@@ -2002,7 +2030,7 @@ async function startApp() {
     }
     profile = null;
     appShell.hidden = true;
-    authScreen.hidden = false;
+    showLandingScreen();
   }
 }
 

@@ -18,8 +18,114 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
-    <section class="auth-screen" id="authScreen" aria-label="Chatter account access">
+  <body class="landing-mode">
+    <main class="landing-screen" id="landingScreen">
+      <header class="landing-header">
+        <a class="landing-brand" href="#home" aria-label="Chatter home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M7.2 23.8 6 28l5.2-1.6a13 13 0 1 0-4-2.6Z" fill="currentColor" />
+              <path d="M11 13.2h10M11 18h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>chatter<span class="brand-dot">.</span></span>
+        </a>
+        <nav class="landing-nav" aria-label="Main navigation">
+          <a href="#features">Features</a>
+          <a href="#privacy">Your privacy</a>
+        </nav>
+        <div class="landing-header-actions">
+          <button class="landing-login" id="landingLogin" type="button">Log in</button>
+          <button class="landing-button landing-button-small" id="landingGetStarted" type="button">Get started <span aria-hidden="true">→</span></button>
+        </div>
+      </header>
+
+      <section class="landing-hero" id="home">
+        <div class="landing-hero-copy">
+          <span class="landing-eyebrow"><span class="landing-online-dot"></span> A little closer, wherever you are</span>
+          <h1>Your people.<br /><span>Closer together.</span></h1>
+          <p>Catch up with your people, share a moment, or hear a familiar voice. Chatter brings your conversations together in one friendly place.</p>
+          <div class="landing-hero-actions">
+            <button class="landing-button" id="heroGetStarted" type="button">Create your free account <span aria-hidden="true">→</span></button>
+            <span class="landing-no-card">Simple to join. Made for your people.</span>
+          </div>
+          <div class="landing-social-proof">
+            <span class="landing-avatar landing-avatar-one">A</span>
+            <span class="landing-avatar landing-avatar-two">M</span>
+            <span class="landing-avatar landing-avatar-three">S</span>
+            <span>Make room for better conversations</span>
+          </div>
+        </div>
+        <div class="landing-hero-art" aria-label="Illustration of a Chatter conversation">
+          <div class="landing-art-glow"></div>
+          <div class="landing-chat-card">
+            <div class="landing-chat-top">
+              <span class="landing-chat-avatar">L</span>
+              <span class="landing-chat-person"><strong>Lena Brooks</strong><small><span></span> online now</small></span>
+              <span class="landing-chat-more" aria-hidden="true">···</span>
+            </div>
+            <div class="landing-chat-date">TODAY, 10:42</div>
+            <div class="landing-message landing-message-in">Hey! Are we still on for this weekend?</div>
+            <div class="landing-message landing-message-out">Absolutely! Looking forward to it 😊</div>
+            <div class="landing-message landing-message-in">Me too ✨</div>
+            <div class="landing-chat-compose"><span>Write a message...</span><span class="landing-send" aria-hidden="true">↑</span></div>
+          </div>
+          <div class="landing-float-note"><span class="landing-note-icon">♡</span><span><strong>Your people, one tap away</strong><small>Chats, groups and calls</small></span></div>
+          <div class="landing-sparkle landing-sparkle-one" aria-hidden="true">✦</div>
+          <div class="landing-sparkle landing-sparkle-two" aria-hidden="true">✳</div>
+        </div>
+      </section>
+
+      <section class="landing-features" id="features">
+        <div class="landing-section-heading">
+          <span class="landing-eyebrow">A BETTER WAY TO STAY IN TOUCH</span>
+          <h2>Everything good conversations need.</h2>
+          <p>Little ways to feel closer, whether it’s a quick hello or a long catch-up.</p>
+        </div>
+        <div class="landing-feature-grid">
+          <article class="landing-feature-card">
+            <span class="landing-feature-icon feature-chat" aria-hidden="true">↗</span>
+            <h3>One-to-one chats</h3>
+            <p>Share messages and photos with the people you care about, all in one place.</p>
+          </article>
+          <article class="landing-feature-card">
+            <span class="landing-feature-icon feature-group" aria-hidden="true">◎</span>
+            <h3>Make it a group thing</h3>
+            <p>Bring your friends together for plans, updates, and the everyday moments.</p>
+          </article>
+          <article class="landing-feature-card">
+            <span class="landing-feature-icon feature-call" aria-hidden="true">⌁</span>
+            <h3>Talk face to face</h3>
+            <p>Start audio or video calls right from your conversations when words aren’t enough.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-privacy" id="privacy">
+        <div class="landing-privacy-mark" aria-hidden="true">✓</div>
+        <div>
+          <span class="landing-eyebrow">CONVERSATIONS ARE PERSONAL</span>
+          <h2>Your private messages stay private.</h2>
+          <p>Chatter admins can’t read the contents of your private messages or access your call audio and video. Messages are reviewed only when someone reports them.</p>
+        </div>
+        <button class="landing-text-link" id="privacyGetStarted" type="button">Come on in <span aria-hidden="true">→</span></button>
+      </section>
+
+      <footer class="landing-footer">
+        <a class="landing-brand" href="#home" aria-label="Chatter home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <path d="M7.2 23.8 6 28l5.2-1.6a13 13 0 1 0-4-2.6Z" fill="currentColor" />
+              <path d="M11 13.2h10M11 18h6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <span>chatter<span class="brand-dot">.</span></span>
+        </a>
+        <span>A little closer, wherever you are.</span>
+      </footer>
+    </main>
+
+    <section class="auth-screen" id="authScreen" aria-label="Chatter account access" hidden>
       <div class="auth-brand">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none">
@@ -44,6 +150,7 @@
           <span class="auth-illustration-caption">Good conversations start here.</span>
         </div>
         <div class="auth-content">
+          <button class="auth-back auth-home-link" id="returnHomeButton" type="button">← Back to Chatter home</button>
           <form id="registerForm">
             <span class="auth-eyebrow">YOUR PEOPLE, ONE TAP AWAY</span>
             <h1>Create your account</h1>

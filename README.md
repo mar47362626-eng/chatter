@@ -1,6 +1,6 @@
 # Chatter
 
-Chatter is a chat application served by Node.js. It uses Supabase PostgreSQL for accounts, contacts, conversations, groups, messages, and activity, and server-sent events to deliver chat updates to connected browsers.
+Chatter is a chat application served by Node.js. Its public home page introduces the app and links into account registration and login. It uses Supabase PostgreSQL for accounts, contacts, conversations, groups, messages, and activity, and server-sent events to deliver chat updates to connected browsers.
 
 ## Requirements
 
