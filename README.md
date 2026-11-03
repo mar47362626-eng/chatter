@@ -66,18 +66,17 @@ This feature does not create phone numbers or enable real calls/SMS. Add only nu
 Before deploying the new feature, run the updated `supabase-schema.sql` in the Supabase SQL Editor. It creates or migrates the private inventory, subscription, and payment tables, including the customer-owned reservation and pending-approval status. In the live Paystack dashboard, create a **monthly NGN plan for ₦10,000** and configure its webhook URL as:
 
 ```text
-https://YOUR-RENDER-SERVICE.onrender.com/api/paystack/webhook
+https://chatterr.mar47362626.workers.dev/api/paystack/webhook
 ```
 
-In Render → your service → Environment, add these values as private environment variables:
+Add these as Worker secrets in Cloudflare:
 
 ```text
 PAYSTACK_SECRET_KEY=sk_live_your_live_secret_key
 PAYSTACK_PLAN_CODE=PLN_your_monthly_plan_code
-CHATTER_PUBLIC_URL=https://YOUR-RENDER-SERVICE.onrender.com
 ```
 
-Use the secret key and plan code from the same **live** Paystack account. Keep the secret key only in Render; never put it in browser code, GitHub, or chat. The existing `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY`, Brevo variables, and moderator password must also remain configured in Render. After deploying and running the schema, sign in at `/moderation.html`, open **Phone numbers**, choose the country from the calling-code dropdown, and enter only the national digits. The dropdown lists valid national-number lengths, and the server validates the selected country and full number. Only available, unassigned numbers can be removed.
+Use the secret key and plan code from the same **live** Paystack account. Keep the secret key only in Cloudflare's secret settings; never put it in browser code, GitHub, or chat. The existing `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY`, Brevo variables, and moderator password must also be configured as Worker secrets. `CHATTER_PUBLIC_URL` is set in `wrangler.jsonc`. After deploying and running the schema, sign in at `/moderation.html`, open **Phone numbers**, choose the country from the calling-code dropdown, and enter only the national digits. The dropdown lists valid national-number lengths, and the server validates the selected country and full number. Only available, unassigned numbers can be removed.
 
 Enable Paystack's `charge.success`, `subscription.create`, `subscription.not_renew`, `subscription.disable`, and `invoice.payment_failed` webhook events so payments, renewals, failures, and cancellations update Chatter.
 
@@ -98,19 +97,19 @@ Open `http://localhost:3000/moderation.html` and sign in with that password. Kee
 
 This local setup does not send SMS verification codes or upload file contents. Before deploying publicly, add rate limiting and database backups.
 
-## Render deployment
+## Cloudflare Workers deployment
 
-The GitHub Pages URL and a static Cloudflare Pages deployment serve files only; they cannot run this Node.js server or real-time calls. To deploy the full app on Render, create a new **Blueprint** from this repository and Render will use [`render.yaml`](./render.yaml) to build and start the web service. First create a Supabase project and run `supabase-schema.sql` in its SQL Editor.
+The static-only deployment serves the Chatter frontend but cannot run its Node.js API. The Cloudflare setup in [`wrangler.jsonc`](./wrangler.jsonc) uses a Worker for routing and a single Cloudflare Container for the existing Node.js server. **Workers Containers require a Cloudflare Workers Paid plan.** A single container is used because live event streams and call signaling currently share in-memory state in the server process.
 
-When prompted during Blueprint setup, provide these private environment variables:
+First create a Supabase project and run `supabase-schema.sql` in its SQL Editor. Enable the Workers Paid plan, then configure the Worker secrets in Cloudflare (or set them with `npx wrangler secret put SECRET_NAME` from this repository):
 
 - `SUPABASE_PROJECT_ID` set to the project reference from the Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` set to the project service-role key (server-side secret)
-- `CHATTER_MODERATOR_PASSWORD` set through Render's secret environment-variable settings to a unique password of at least 20 characters
-- `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for verified registration and welcome emails
+- `SUPABASE_SERVICE_ROLE_KEY` set to the project service-role key
+- `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` for account registration and email verification
+- `CHATTER_MODERATOR_PASSWORD` set to a unique password of at least 20 characters
 
-The Blueprint sets `HOST=0.0.0.0`, `NODE_ENV=production`, and Node.js 22.13.0. After the first deployment, set `CHATTER_PUBLIC_URL` to the HTTPS URL Render assigns to the service. Optionally configure `CHATTER_ICE_SERVERS` with your production STUN/TURN settings; TURN is needed for reliable calls across restrictive networks. Paystack variables are needed only if you enable paid Chatter numbers.
+Set secrets before the first deployment so the container can connect to Supabase as it starts. Never put secrets in `wrangler.jsonc`, GitHub, or browser code. `CHATTER_PUBLIC_URL` is set in the Wrangler config to the current `workers.dev` URL. `CHATTER_ICE_SERVERS` is optional for production TURN configuration; `PAYSTACK_SECRET_KEY` and `PAYSTACK_PLAN_CODE` are needed only for paid Chatter numbers.
 
-Chatter stores data in Supabase PostgreSQL; it does not need a Render disk for the database. Existing SQLite data is not automatically imported—this Supabase setup starts fresh. Never add production secrets to GitHub or browser code.
+In the Cloudflare Worker build settings, use `npm ci` to install dependencies and `npm run deploy` as the deploy command. Alternatively, deploy from an authenticated terminal with `npm ci` followed by `npm run deploy`. The Worker serves the static frontend and forwards `/api` requests to the container. Chatter stores application data in Supabase PostgreSQL; it does not need a persistent container disk. Existing SQLite data is not automatically imported.
 
-The Supabase schema enables row-level security and defines no public table access policies. The app uses `SUPABASE_SERVICE_ROLE_KEY` only from its Node.js server; never put it in frontend code, GitHub, or a public environment variable. Configure database backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access. Render serves the Node.js app at its own URL; the GitHub Pages link is not the live backend.
+The Supabase schema enables row-level security and defines no public table access policies. Configure database backups and rate limiting, and test registration, login, calls, and moderation on the deployed HTTPS URL. HTTPS is required for browser camera and microphone access.

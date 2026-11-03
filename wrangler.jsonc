@@ -1,0 +1,42 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "chatterr",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-03",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api", "/api/*"]
+  },
+  "containers": [
+    {
+      "class_name": "ChatterBackend",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./Dockerfile"
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CHATTER_BACKEND",
+        "class_name": "ChatterBackend"
+      }
+    ]
+  },
+  "exports": {
+    "ChatterBackend": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "vars": {
+    "CHATTER_PUBLIC_URL": "https://chatterr.mar47362626.workers.dev"
+  }
+}
