@@ -496,8 +496,9 @@ button { color: inherit; }
 
 body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background: #f8faf8; }
 .landing-screen[hidden] { display: none; }
-.landing-screen { min-height: 100vh; overflow: hidden; background: #f8faf8; }
-.landing-header { position: relative; z-index: 1; display: flex; width: min(1160px, calc(100% - 64px)); height: 88px; align-items: center; justify-content: space-between; margin: 0 auto; border-bottom: 1px solid #e9eee9; }
+.landing-screen { display: flex; height: 100vh; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; background: #f8faf8; }
+.landing-header { position: relative; z-index: 1; display: flex; width: min(1160px, calc(100% - 64px)); height: 88px; flex: 0 0 88px; align-items: center; justify-content: space-between; margin: 0 auto; border-bottom: 1px solid #e9eee9; background: #f8faf8; }
+.landing-content { min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: thin; scrollbar-color: #dce8df transparent; }
 .landing-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-family: var(--heading); font-size: 21px; font-weight: 800; letter-spacing: -1.1px; text-decoration: none; }
 .brand-mark { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border-radius: 11px; background: var(--green); color: #fff; }
 .brand-mark svg { width: 21px; height: 21px; }
@@ -568,7 +569,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 .landing-privacy h2 { margin: 6px 0; font-size: 18px; letter-spacing: -.5px; }
 .landing-privacy p { max-width: 630px; font-size: 10px; }
 .landing-text-link { flex: 0 0 auto; padding: 8px; border: 0; background: transparent; color: var(--green-dark); cursor: pointer; font-size: 10px; font-weight: 700; }
-.landing-footer { display: flex; width: min(1160px, calc(100% - 64px)); min-height: 83px; align-items: center; justify-content: space-between; margin: 0 auto; border-top: 1px solid #e9eee9; }
+.landing-footer { display: flex; width: min(1160px, calc(100% - 64px)); min-height: 83px; flex: 0 0 83px; align-items: center; justify-content: space-between; margin: 0 auto; border-top: 1px solid #e9eee9; background: #f8faf8; }
 .landing-footer .landing-brand { font-size: 17px; }
 .landing-footer .brand-mark { width: 27px; height: 27px; flex-basis: 27px; border-radius: 9px; }
 .landing-footer .brand-mark svg { width: 19px; height: 19px; }
@@ -601,7 +602,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 @media (max-width: 760px) {
   body { background: #fff; }
   body.landing-mode { background: #f8faf8; }
-  .landing-header { width: calc(100% - 36px); height: 70px; }
+  .landing-header { width: calc(100% - 36px); height: 70px; flex-basis: 70px; }
   .landing-brand { gap: 7px; font-size: 19px; }
   .landing-nav { display: none; }
   .landing-header-actions { gap: 12px; }
@@ -626,11 +627,11 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .landing-privacy > div:nth-child(2) { flex: 1 1 calc(100% - 54px); }
   .landing-privacy h2 { font-size: 16px; }
   .landing-text-link { margin-left: 49px; padding-left: 0; }
-  .landing-footer { width: calc(100% - 40px); min-height: 72px; }
+  .landing-footer { width: calc(100% - 40px); min-height: 72px; flex-basis: 72px; }
   .landing-footer > span { font-size: 8px; }
-  .auth-screen { justify-content: flex-start; padding: 30px 16px 20px; }
-  .auth-brand { margin: 0 0 20px; }
-  .auth-card { width: min(440px, 100%); min-height: 0; grid-template-columns: 1fr; border-radius: 18px; }
+  .auth-screen { justify-content: flex-start; gap: 12px; overflow: hidden; padding: 14px 16px 10px; }
+  .auth-brand { flex: 0 0 auto; margin: 0; }
+  .auth-card { width: min(440px, 100%); min-height: 0; flex: 1 1 auto; grid-template-columns: 1fr; grid-template-rows: 145px minmax(0, 1fr); overflow: hidden; border-radius: 18px; }
   .auth-illustration { min-height: 145px; }
   .auth-chat-mark { width: 68px; height: 68px; border-radius: 22px; }
   .auth-chat-mark svg { width: 46px; height: 46px; }
@@ -640,11 +641,11 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .bubble-two { right: 7%; bottom: 17%; }
   .orbit-one { width: 220px; height: 220px; }
   .orbit-two { width: 300px; height: 300px; }
-  .auth-content { padding: 28px 24px 30px; }
+  .auth-content { min-height: 0; overflow-y: auto; padding: 22px 24px 28px; overscroll-behavior: contain; }
   .auth-content h1 { font-size: 25px; }
   .auth-description { margin-bottom: 20px; }
   .auth-back { margin-bottom: 20px; }
-  .auth-footer { margin-top: 14px; }
+  .auth-footer { flex: 0 0 auto; margin: 0; padding: 2px 0 3px; }
   .dialog-backdrop { align-items: end; padding: 12px; }
   .dialog-card { max-height: calc(100dvh - 24px); padding: 27px 22px 24px; border-radius: 18px; }
   .app-shell { height: 100dvh; min-height: 0; }
