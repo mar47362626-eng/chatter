@@ -165,6 +165,12 @@
       .inline-button { border: 0; padding: 7px 0; background: transparent; color: #9c4c3a; font-size: 12px; font-weight: 750; cursor: pointer; }
       .inline-button:disabled { opacity: .6; cursor: wait; }
       .directory-contact .avatar { border-radius: 50%; }
+      .group-member-list { display: grid; max-height: 260px; gap: 5px; overflow: auto; margin: 12px 0 4px; }
+      .group-member-option { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 13px; padding: 9px; cursor: pointer; }
+      .group-member-option:has(input:checked) { border-color: #b7cba2; background: #f1f5eb; }
+      .group-member-option input { width: 17px; height: 17px; accent-color: var(--green); }
+      .group-member-option .directory-copy { flex: 1; }
+      .group-member-option .avatar { width: 35px; height: 35px; border-radius: 50%; }
       .mobile-nav { display: none; }
       .toast { position: fixed; z-index: 20; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: min(420px, calc(100vw - 36px)); transform: translateY(12px); border-radius: 13px; padding: 13px 16px; background: #203b2c; box-shadow: var(--shadow); color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
       .toast.visible { transform: translateY(0); opacity: 1; }
@@ -322,6 +328,18 @@
         <div class="field"><label for="contactPhone">Phone number</label><input id="contactPhone" type="tel" autocomplete="tel" placeholder="+234 801 234 5678" required /></div>
         <p class="form-error" id="contactError" role="alert"></p>
         <button class="primary-button" type="submit">Find and chat</button>
+      </form>
+    </div>
+    <div class="modal-backdrop" id="createGroupModal" hidden>
+      <form class="modal" id="createGroupForm">
+        <div class="modal-heading"><h2>Create a group</h2><button class="icon-button" id="closeCreateGroup" type="button" aria-label="Close">×</button></div>
+        <p class="page-description" style="margin-top:8px">Give your group a name and choose at least one Chatter contact.</p>
+        <div class="field"><label for="groupName">Group name</label><input id="groupName" autocomplete="off" placeholder="For example, Weekend plans" required minlength="2" maxlength="50" /></div>
+        <div class="field"><label for="groupDescription">Description <span style="font-weight:400">(optional)</span></label><textarea id="groupDescription" maxlength="180" rows="2" placeholder="What is this group for?"></textarea></div>
+        <span class="directory-label">CHOOSE MEMBERS</span>
+        <div class="group-member-list" id="groupMemberList"></div>
+        <p class="form-error" id="groupError" role="alert"></p>
+        <button class="primary-button" id="createGroupSubmit" type="submit">Create group</button>
       </form>
     </div>
     <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
@@ -522,6 +540,10 @@
             <button class="settings-card directory-contact" type="button" data-action="add-contact">
               <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg></span>
               <span class="directory-copy"><strong>Add a Chatter contact</strong><span>Find someone by their Nigerian phone number</span></span>
+            </button>
+            <button class="settings-card directory-contact" type="button" data-action="open-create-group">
+              <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 19c.4-3 2.4-4.5 5.5-4.5s5.1 1.5 5.5 4.5M15 14.8c2.8-.4 4.7 1.1 5.3 3.7" /></svg></span>
+              <span class="directory-copy"><strong>Create a group</strong><span>Start a conversation with several contacts</span></span>
             </button>
             ${!state.contactsLoaded ? `<div class="empty-note">Loading your contacts…</div>`
               : state.contactsError ? `<div class="empty-note">${escapeHtml(state.contactsError)}<br /><button class="text-button" type="button" data-action="reload-contacts">Try again</button></div>`
@@ -771,6 +793,24 @@
             $("#contactError").textContent = "";
             $("#newChatModal").hidden = false;
             $("#contactName").focus();
+          } else if (action === "open-create-group") {
+            $("#groupError").textContent = "";
+            $("#createGroupForm").reset();
+            $("#groupMemberList").innerHTML = state.contacts.length ? state.contacts
+              .slice()
+              .sort((left, right) => left.name.localeCompare(right.name))
+              .map((contact) => `
+                <label class="group-member-option">
+                  <input type="checkbox" name="memberIds" value="${escapeHtml(contact.id)}" />
+                  ${avatar({ ...contact, initials: initials(contact.name) }, true)}
+                  <span class="directory-copy"><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.phone || "Chatter contact")}</span></span>
+                </label>`).join("")
+              : `<div class="empty-note">${state.contactsLoaded ? "Add Chatter contacts before creating a group." : "Contacts are still loading. Please try again in a moment."}</div>`;
+            $("#createGroupSubmit").disabled = !state.contacts.length;
+            $("#createGroupModal").hidden = false;
+            $("#groupName").focus();
+          } else if (action === "close-create-group") {
+            $("#createGroupModal").hidden = true;
           } else if (action === "import-phone-contacts") {
             try {
               const picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
@@ -991,6 +1031,43 @@
         $("#newChatModal").addEventListener("click", (event) => {
           if (event.target.id === "newChatModal") event.currentTarget.hidden = true;
         });
+        $("#closeCreateGroup").addEventListener("click", () => { $("#createGroupModal").hidden = true; });
+        $("#createGroupModal").addEventListener("click", (event) => {
+          if (event.target.id === "createGroupModal") event.currentTarget.hidden = true;
+        });
+        $("#createGroupForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const memberIds = [...event.currentTarget.querySelectorAll('input[name="memberIds"]:checked')].map((input) => input.value);
+          if (!memberIds.length) {
+            $("#groupError").textContent = "Choose at least one contact for your group.";
+            return;
+          }
+          const button = $("#createGroupSubmit");
+          button.disabled = true;
+          $("#groupError").textContent = "";
+          try {
+            const result = await api("/api/groups", {
+              method: "POST",
+              body: JSON.stringify({
+                name: $("#groupName").value.trim(),
+                description: $("#groupDescription").value.trim(),
+                type: "group",
+                memberIds
+              })
+            });
+            state.chats = [result.chat, ...state.chats.filter((chat) => chat.id !== result.chat.id)];
+            state.activeId = result.chat.id;
+            state.page = "chats";
+            state.filter = "all";
+            $("#createGroupModal").hidden = true;
+            renderPage();
+            toast("Your group has been created.");
+          } catch (error) {
+            $("#groupError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
         $("#newChatForm").addEventListener("submit", async (event) => {
           event.preventDefault();
           const button = event.currentTarget.querySelector('button[type="submit"]');
@@ -1002,6 +1079,12 @@
               body: JSON.stringify({ name: $("#contactName").value.trim(), phone: $("#contactPhone").value.trim() })
             });
             state.chats = [result.chat, ...state.chats.filter((chat) => chat.id !== result.chat.id)];
+            if (result.chat.contactId) {
+              state.contacts = [
+                { id: result.chat.contactId, name: result.chat.name, phone: result.chat.phone || "", avatarUrl: result.chat.avatarUrl || "" },
+                ...state.contacts.filter((contact) => contact.id !== result.chat.contactId)
+              ];
+            }
             state.contactsLoaded = false;
             state.activeId = result.chat.id;
             state.page = "chats";

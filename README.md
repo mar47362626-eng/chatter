@@ -2,7 +2,7 @@
 
 Chatter is a chat application served by Node.js. Its public home page introduces the app and links into account registration and login. It uses Supabase PostgreSQL for accounts, contacts, conversations, groups, messages, and activity, and server-sent events to deliver chat updates to connected browsers.
 
-Open `/app` (or `/app.html`) for the standalone mobile and tablet app. It shares the same accounts and conversations as the main site, with its own contact picker (including device contacts on supported browsers), profile-photo and account-detail editing, and international Chatter number requests in Settings.
+Open `/app` (or `/app.html`) for the standalone mobile and tablet app. It shares the same accounts and conversations as the main site, with its own contact picker (including device contacts on supported browsers), group creation, profile-photo and account-detail editing, and international Chatter number requests in Settings.
 
 ## Requirements
 
