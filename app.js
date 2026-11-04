@@ -144,6 +144,9 @@ const emojiPopover = document.querySelector("#emojiPopover");
 const toast = document.querySelector("#toast");
 const authScreen = document.querySelector("#authScreen");
 const landingScreen = document.querySelector("#landingScreen");
+const standaloneAppPage = new URLSearchParams(window.location.search).get("app") === "1";
+const appCallsView = document.querySelector("#appCallsView");
+const appCallHistory = document.querySelector("#appCallHistory");
 const registerForm = document.querySelector("#registerForm");
 const verificationForm = document.querySelector("#verificationForm");
 const loginForm = document.querySelector("#loginForm");
@@ -168,6 +171,11 @@ function showAuthScreen(mode = "register") {
 
 function showLandingScreen() {
   appShell.hidden = true;
+  appShell.classList.remove("show-chat", "show-calls");
+  if (standaloneAppPage) {
+    showAuthScreen("register");
+    return;
+  }
   authScreen.hidden = true;
   landingScreen.hidden = false;
   document.body.classList.add("landing-mode");
@@ -177,7 +185,93 @@ for (const buttonId of ["landingGetStarted", "heroGetStarted", "privacyGetStarte
   document.querySelector(`#${buttonId}`).addEventListener("click", () => showAuthScreen("register"));
 }
 document.querySelector("#landingLogin").addEventListener("click", () => showAuthScreen("login"));
-document.querySelector("#returnHomeButton").addEventListener("click", showLandingScreen);
+document.querySelector("#returnHomeButton").addEventListener("click", () => {
+  if (standaloneAppPage) {
+    window.location.assign("/");
+    return;
+  }
+  showLandingScreen();
+});
+
+function setAppNavigation(tab) {
+  document.querySelectorAll(".app-nav-button").forEach((button) => {
+    const selected = button.dataset.appTab === tab;
+    button.classList.toggle("is-active", selected);
+    if (selected) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
+}
+
+function renderAppCallHistory() {
+  const callRows = chats.flatMap((chat) => chat.messages
+    .filter((message) => message.call)
+    .map((message) => ({ chat, message })))
+    .sort((left, right) => (right.message.createdAt || "").localeCompare(left.message.createdAt || ""));
+
+  if (!callRows.length) {
+    appCallHistory.innerHTML = `
+      <div class="app-call-empty">
+        <span class="app-call-empty-icon" aria-hidden="true">⌁</span>
+        <strong>Your calls will appear here</strong>
+        <span>Start an audio or video call from any conversation.</span>
+      </div>`;
+    return;
+  }
+
+  appCallHistory.innerHTML = callRows.map(({ chat, message }) => {
+    const callLabel = message.call.type === "audio" ? "Audio call" : "Video call";
+    const status = message.call.status === "completed"
+      ? `Answered · ${formatCallDuration(message.call.durationSeconds)}`
+      : message.call.status === "missed"
+        ? message.call.direction === "incoming" ? "Missed call" : "No answer"
+        : message.call.status === "declined" ? "Declined"
+          : message.call.status === "cancelled" ? "No answer"
+            : message.call.status === "active" ? "Call in progress"
+              : message.call.direction === "incoming" ? "Incoming call" : "Outgoing call";
+    return `
+      <button class="app-call-row" type="button" data-call-chat-id="${escapeHtml(chat.id)}">
+        <span class="app-call-avatar ${escapeHtml(chat.avatar)}">${avatarContent(chat.initials, chat.avatarUrl)}</span>
+        <span class="app-call-copy">
+          <strong>${escapeHtml(chat.name)}</strong>
+          <small class="${message.call.status === "missed" ? "is-missed" : ""}">${escapeHtml(status)}</small>
+        </span>
+        <span class="app-call-meta">${escapeHtml(message.time || "")}<span>${callLabel}</span></span>
+        <span class="app-call-type" aria-hidden="true">${message.call.type === "audio" ? "☎" : "▣"}</span>
+      </button>`;
+  }).join("");
+}
+
+document.querySelector("#appBottomNav").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-app-tab]");
+  if (!button) return;
+  const tab = button.dataset.appTab;
+  appShell.classList.remove("show-calls");
+  if (tab === "chats" || tab === "communities") {
+    appCallsView.hidden = true;
+    appShell.classList.remove("show-chat");
+    const filter = tab === "communities" ? "groups" : "all";
+    document.querySelector(`.filter-chip[data-filter="${filter}"]`).click();
+    setAppNavigation(tab);
+  } else if (tab === "calls") {
+    appShell.classList.remove("show-chat");
+    renderAppCallHistory();
+    appCallsView.hidden = false;
+    appShell.classList.add("show-calls");
+    setAppNavigation(tab);
+  } else if (tab === "settings") {
+    appCallsView.hidden = true;
+    appShell.classList.remove("show-chat");
+    document.querySelector("#settingsButton").click();
+    setAppNavigation(tab);
+  }
+});
+
+appCallHistory.addEventListener("click", (event) => {
+  const callButton = event.target.closest("[data-call-chat-id]");
+  if (!callButton) return;
+  document.querySelector('.filter-chip[data-filter="all"]').click();
+  selectChat(callButton.dataset.callChatId);
+});
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
@@ -297,6 +391,8 @@ function openChatApp() {
   landingScreen.hidden = true;
   authScreen.hidden = true;
   document.body.classList.remove("landing-mode");
+  appCallsView.hidden = true;
+  appShell.classList.remove("show-calls");
   appShell.hidden = false;
 }
 
@@ -991,7 +1087,12 @@ function selectChat(id) {
   chat.unread = 0;
   renderChatList();
   renderMessages();
+  appShell.classList.remove("show-calls");
+  appCallsView.hidden = true;
   appShell.classList.add("show-chat");
+  if (document.querySelector(".app-nav-button.is-active")?.dataset.appTab === "calls") {
+    setAppNavigation("chats");
+  }
   messageInput.focus({ preventScroll: true });
 }
 
@@ -1175,7 +1276,10 @@ messageForm.addEventListener("submit", async (event) => {
   messageInput.focus();
 });
 
-document.querySelector("#backButton").addEventListener("click", () => appShell.classList.remove("show-chat"));
+document.querySelector("#backButton").addEventListener("click", () => {
+  appShell.classList.remove("show-chat");
+  setAppNavigation(activeFilter === "groups" ? "communities" : "chats");
+});
 document.querySelector("#newChatButton").addEventListener("click", () => {
   openNewChatView();
 });

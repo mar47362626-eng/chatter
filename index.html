@@ -1,6 +1,11 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      if (new URLSearchParams(location.search).get("app") === "1") {
+        document.documentElement.classList.add("app-mode");
+      }
+    </script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f5f7f6" />
@@ -16,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20261104-app-page" />
   </head>
   <body class="landing-mode">
     <main class="landing-screen" id="landingScreen">
@@ -374,6 +379,33 @@
         </form>
         <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" hidden />
       </section>
+
+      <section class="app-calls-view" id="appCallsView" aria-label="Recent calls" hidden>
+        <header class="app-calls-header">
+          <h1>Calls</h1>
+          <p>Audio and video calls with your Chatter contacts.</p>
+        </header>
+        <div class="app-call-history" id="appCallHistory"></div>
+      </section>
+
+      <nav class="app-bottom-nav" id="appBottomNav" aria-label="App navigation">
+        <button class="app-nav-button is-active" type="button" data-app-tab="chats" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-5 4v-4.2a2.5 2.5 0 0 1-1-2V5.5Z" /><path d="M8 8h8M8 12h5" /></svg>
+          <span>Chats</span>
+        </button>
+        <button class="app-nav-button" type="button" data-app-tab="communities">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0M15 14a4.5 4.5 0 0 1 5.5 4" /></svg>
+          <span>Communities</span>
+        </button>
+        <button class="app-nav-button" type="button" data-app-tab="calls">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.8 10 7.5 8.3 9.2a14 14 0 0 0 6.5 6.5l1.7-1.7 3.7 2.8-.8 3a1.5 1.5 0 0 1-1.7 1.1A18.8 18.8 0 0 1 3.1 6.3a1.5 1.5 0 0 1 1.1-1.7l3-.8Z" /></svg>
+          <span>Calls</span>
+        </button>
+        <button class="app-nav-button" type="button" data-app-tab="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z" /></svg>
+          <span>Settings</span>
+        </button>
+      </nav>
     </main>
     <div class="dialog-backdrop" id="contactDialog" hidden>
       <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="contactDialogTitle">
@@ -554,6 +586,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="country-codes.js?v=20261101"></script>
-    <script src="app.js?v=20261102-number-store-design"></script>
+    <script src="app.js?v=20261104-app-page"></script>
   </body>
 </html>

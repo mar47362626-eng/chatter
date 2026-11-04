@@ -835,3 +835,54 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+html.app-mode body { height: 100vh; height: 100dvh; overflow: hidden; background: #f3f6f3; }
+html.app-mode .landing-screen { display: none !important; }
+html.app-mode .app-shell { width: 100%; min-height: 0; margin: 0; box-shadow: none; }
+.app-bottom-nav { display: none; }
+.app-calls-view { display: none; }
+.app-calls-view[hidden] { display: none; }
+.app-shell.show-calls .app-calls-view { display: flex; }
+
+.app-calls-view { min-width: 0; flex: 1; flex-direction: column; overflow: hidden; background: #f8faf8; }
+.app-calls-header { flex: 0 0 auto; padding: 24px 28px 17px; border-bottom: 1px solid var(--line); background: #fff; }
+.app-calls-header h1 { margin: 0 0 5px; color: #23352a; font-family: var(--heading); font-size: 22px; letter-spacing: -.7px; }
+.app-calls-header p { margin: 0; color: #849188; font-size: 11px; }
+.app-call-history { min-height: 0; flex: 1; overflow: auto; padding: 8px 14px; }
+.app-call-row { display: flex; width: 100%; min-height: 72px; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-bottom: 1px solid #edf1ed; background: transparent; cursor: pointer; text-align: left; }
+.app-call-row:hover { border-radius: 12px; background: #fff; }
+.app-call-avatar { display: grid; width: 45px; height: 45px; flex: 0 0 45px; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; font-family: var(--heading); font-size: 13px; font-weight: 700; }
+.app-call-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 5px; }
+.app-call-copy strong { overflow: hidden; color: #35443a; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.app-call-copy small { color: #829087; font-size: 10px; }
+.app-call-copy small.is-missed { color: #c94d4d; }
+.app-call-meta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 5px; color: #87948b; font-size: 9px; }
+.app-call-meta span { color: #a1aaa4; font-size: 8px; }
+.app-call-type { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border-radius: 50%; background: #e7f5ec; color: var(--green-dark); font-size: 16px; }
+.app-call-empty { display: flex; min-height: 230px; flex-direction: column; align-items: center; justify-content: center; gap: 9px; padding: 30px; color: #89968e; text-align: center; }
+.app-call-empty-icon { display: grid; width: 60px; height: 60px; place-items: center; margin-bottom: 5px; border-radius: 20px; background: #e8f6ef; color: var(--green); font-size: 31px; }
+.app-call-empty strong { color: #435248; font-family: var(--heading); font-size: 14px; }
+.app-call-empty > span:last-child { max-width: 250px; font-size: 10px; line-height: 1.6; }
+
+@media (max-width: 1024px) {
+  html.app-mode .app-shell { height: calc(100dvh - 68px - env(safe-area-inset-bottom, 0px)); }
+  html.app-mode .app-bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: flex; height: calc(68px + env(safe-area-inset-bottom, 0px)); align-items: stretch; justify-content: space-around; padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #e8eee9; background: #fff; }
+  html.app-mode .app-nav-button { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 2px; border: 0; border-radius: 12px; background: transparent; color: #859189; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  html.app-mode .app-nav-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+  html.app-mode .app-nav-button span { max-width: 100%; overflow: hidden; font-size: 9px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  html.app-mode .app-nav-button.is-active { background: #e7f5ec; color: var(--green-dark); }
+  html.app-mode .app-shell.show-calls .sidebar, html.app-mode .app-shell.show-calls .chat-panel { display: none !important; }
+  html.app-mode .app-shell.show-calls .app-calls-view { display: flex; }
+  html.app-mode .app-calls-header { padding: 19px 20px 14px; }
+  html.app-mode .app-call-history { padding: 5px 12px; }
+}
+
+@media (max-width: 760px) {
+  html.app-mode body { background: #f5f7f5; }
+  html.app-mode .app-shell { width: 100%; }
+  html.app-mode .app-shell.show-calls { overflow: hidden; }
+  html.app-mode .app-calls-view { width: 100%; }
+  html.app-mode .app-call-row { min-height: 68px; gap: 10px; padding: 8px 7px; }
+  html.app-mode .app-call-avatar { width: 42px; height: 42px; flex-basis: 42px; }
+  html.app-mode .app-call-type { width: 29px; height: 29px; flex-basis: 29px; }
+}
