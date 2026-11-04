@@ -3,26 +3,696 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f7f6" />
-    <meta name="description" content="Open Chatter chats, communities, and calls." />
-    <title>Chatter app</title>
+    <meta name="theme-color" content="#f5f4ed" />
+    <meta name="description" content="A fresh, focused way to stay close with Chatter." />
+    <title>Chatter — your space</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2" />
     <style>
+      :root {
+        color-scheme: light;
+        --ink: #17251e;
+        --muted: #78827a;
+        --paper: #f5f4ed;
+        --white: #fffefa;
+        --line: #e8e8df;
+        --green: #245c43;
+        --green-deep: #193d2d;
+        --lime: #d7ed92;
+        --soft-green: #e8f0df;
+        --shadow: 0 24px 80px #2633231c;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
       * { box-sizing: border-box; }
-      html, body, main, iframe { width: 100%; height: 100%; margin: 0; border: 0; }
-      html, body { min-width: 320px; min-height: 100%; overflow: hidden; background: #f5f7f6; }
-      main { height: 100vh; height: 100dvh; }
-      iframe { display: block; height: 100%; background: #f5f7f6; }
+      [hidden] { display: none !important; }
+      html, body { width: 100%; height: 100%; min-width: 320px; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); }
+      button, input, textarea { font: inherit; }
+      button { color: inherit; }
+      button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #9dbb72; outline-offset: 2px; }
+
+      .auth-screen {
+        display: grid;
+        min-height: 100%;
+        place-items: center;
+        overflow: auto;
+        padding: 28px 18px;
+        background:
+          radial-gradient(ellipse at 18% 12%, #dfe9c8 0, transparent 34%),
+          radial-gradient(ellipse at 88% 90%, #d9e8d8 0, transparent 35%),
+          var(--paper);
+      }
+      .auth-card { width: min(100%, 430px); padding: 34px; border: 1px solid #ffffffb8; border-radius: 28px; background: #fffefaed; box-shadow: var(--shadow); }
+      .brand-mark { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 850; letter-spacing: -.7px; }
+      .brand-icon { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 14px 14px 14px 5px; background: var(--green); color: var(--lime); font-size: 18px; font-weight: 900; }
+      .auth-card h1 { margin: 34px 0 8px; font-size: clamp(29px, 7vw, 36px); letter-spacing: -1.6px; line-height: 1.08; }
+      .auth-intro { margin: 0 0 25px; color: var(--muted); line-height: 1.55; }
+      .field { display: grid; gap: 7px; margin: 14px 0; }
+      .field label { color: #46534a; font-size: 12px; font-weight: 750; }
+      .field input, .field textarea { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px; background: #fff; color: var(--ink); }
+      .field input::placeholder, .field textarea::placeholder { color: #a0a9a0; }
+      .primary-button { display: inline-flex; min-height: 48px; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 14px; padding: 0 18px; background: var(--green); color: white; font-weight: 760; cursor: pointer; transition: background .18s, transform .18s; }
+      .primary-button:hover { transform: translateY(-1px); background: var(--green-deep); }
+      .auth-card .primary-button { width: 100%; margin-top: 8px; }
+      .text-button { border: 0; padding: 7px; background: transparent; color: var(--green); font-weight: 750; cursor: pointer; }
+      .auth-switch { margin: 20px 0 0; color: var(--muted); text-align: center; font-size: 13px; }
+      .form-error { min-height: 20px; margin: 6px 0 0; color: #a43c35; font-size: 13px; line-height: 1.4; }
+      .auth-note { display: flex; gap: 8px; margin-top: 23px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+      .workspace { display: grid; width: min(100%, 1440px); height: 100%; min-height: 0; grid-template-columns: minmax(290px, 360px) minmax(0, 1fr); margin: 0 auto; background: var(--white); }
+      .sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--line); background: #fbfaf6; }
+      .sidebar-top { padding: 25px 22px 15px; }
+      .brand-row { display: flex; align-items: center; justify-content: space-between; }
+      .user-pill { display: flex; max-width: 100%; align-items: center; gap: 9px; margin-top: 23px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 15px; background: #fffefa; }
+      .user-pill-copy { min-width: 0; flex: 1; }
+      .user-pill-copy strong, .user-pill-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .user-pill-copy strong { font-size: 12px; }
+      .user-pill-copy span { margin-top: 2px; color: var(--muted); font-size: 11px; }
+      .sidebar-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
+      .sidebar-navigation button { border: 0; border-radius: 10px; padding: 8px 4px; background: transparent; color: #78827a; font-size: 10px; font-weight: 750; cursor: pointer; }
+      .sidebar-navigation button.active { background: var(--soft-green); color: var(--green); }
+      .avatar { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 16px; background: var(--soft-green); color: var(--green); font-size: 14px; font-weight: 800; }
+      .avatar.small { width: 36px; height: 36px; border-radius: 13px; font-size: 11px; }
+      .avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .icon-button { display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 14px; background: #fffefa; cursor: pointer; }
+      .icon-button:hover { background: var(--soft-green); }
+      .icon-button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      .sidebar-heading { display: flex; align-items: center; justify-content: space-between; margin: 24px 0 12px; }
+      .sidebar-heading h1 { margin: 0; font-size: 25px; letter-spacing: -1px; }
+      .search-box { display: flex; min-height: 43px; align-items: center; gap: 9px; padding: 0 13px; border: 1px solid var(--line); border-radius: 13px; background: white; }
+      .search-box svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: #829087; stroke-width: 1.8; }
+      .search-box input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 13px; }
+      .filters { display: flex; gap: 7px; overflow-x: auto; margin: 13px 0 0; padding-bottom: 2px; scrollbar-width: none; }
+      .filters::-webkit-scrollbar { display: none; }
+      .filter-button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 99px; padding: 7px 12px; background: transparent; color: #647168; font-size: 11px; font-weight: 700; cursor: pointer; }
+      .filter-button.active { border-color: var(--green); background: var(--green); color: white; }
+      .conversation-list { min-height: 0; flex: 1; overflow: auto; padding: 4px 11px 16px; }
+      .conversation-item { display: flex; width: 100%; align-items: center; gap: 12px; border: 0; border-radius: 17px; padding: 11px; background: transparent; text-align: left; cursor: pointer; }
+      .conversation-item:hover { background: #f1f1e9; }
+      .conversation-item.active { background: #eaf0e4; }
+      .conversation-info { min-width: 0; flex: 1; }
+      .conversation-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .conversation-top strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+      .conversation-top time { flex: 0 0 auto; color: #8d968d; font-size: 10px; }
+      .conversation-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; }
+      .conversation-bottom span { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+      .online-dot { width: 7px; height: 7px; display: inline-block; margin-right: 5px; border-radius: 50%; background: #83b75a; }
+      .sidebar-footer { padding: 12px 20px 18px; border-top: 1px solid var(--line); color: #879087; font-size: 10px; }
+      .main-panel { position: relative; display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; background: var(--white); }
+      .mobile-header { display: none; }
+      .conversation-header { display: flex; min-height: 78px; align-items: center; gap: 12px; padding: 15px 25px; border-bottom: 1px solid var(--line); }
+      .conversation-title { min-width: 0; flex: 1; }
+      .conversation-title strong, .conversation-title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .conversation-title strong { font-size: 14px; }
+      .conversation-title span { margin-top: 4px; color: var(--muted); font-size: 11px; }
+      .header-actions { display: flex; gap: 8px; }
+      .message-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 24px clamp(16px, 5vw, 70px); background-color: #f8f8f2; background-image: radial-gradient(#d9e2d222 .8px, transparent .8px); background-size: 16px 16px; }
+      .day-label { align-self: center; margin: 2px 0 8px; border: 1px solid #e8e9df; border-radius: 99px; padding: 6px 11px; background: #fffefaed; color: #758076; font-size: 10px; font-weight: 700; }
+      .message { max-width: min(78%, 520px); padding: 11px 13px 8px; border: 1px solid #e8e9e1; border-radius: 5px 17px 17px 17px; background: white; box-shadow: 0 4px 12px #20301c08; overflow-wrap: anywhere; }
+      .message.outgoing { align-self: flex-end; border-color: #dbe9c7; border-radius: 17px 5px 17px 17px; background: #eaf3dc; }
+      .message-sender { display: block; margin-bottom: 5px; color: var(--green); font-size: 10px; font-weight: 800; }
+      .message-text { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
+      .message-time { display: block; margin-top: 6px; color: #899389; font-size: 9px; text-align: right; }
+      .message-image { display: block; max-width: min(100%, 330px); max-height: 250px; margin-bottom: 7px; border-radius: 10px; object-fit: cover; }
+      .composer { display: flex; align-items: flex-end; gap: 9px; padding: 14px 20px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: white; }
+      .composer textarea { min-height: 46px; max-height: 130px; flex: 1; resize: none; border: 1px solid var(--line); border-radius: 15px; padding: 13px 15px; background: #fafaf6; color: var(--ink); font-size: 13px; }
+      .send-button { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 15px; background: var(--green); color: white; cursor: pointer; }
+      .send-button:hover { background: var(--green-deep); }
+      .send-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+      .empty-state { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 35px; text-align: center; }
+      .empty-art { display: grid; width: 112px; height: 112px; place-items: center; margin-bottom: 21px; border-radius: 36px 36px 36px 10px; background: var(--soft-green); color: var(--green); font-size: 44px; }
+      .empty-state h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -1px; }
+      .empty-state p { max-width: 300px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+      .content-page { min-height: 0; flex: 1; overflow: auto; padding: clamp(20px, 5vw, 52px); }
+      .content-page h1 { margin: 0 0 8px; font-size: 29px; letter-spacing: -1.2px; }
+      .page-description { margin: 0 0 24px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .call-card, .settings-card { display: flex; align-items: center; gap: 12px; margin: 9px 0; padding: 14px; border: 1px solid var(--line); border-radius: 17px; background: #fffefa; }
+      .call-copy, .setting-copy { min-width: 0; flex: 1; }
+      .call-copy strong, .call-copy span, .setting-copy strong, .setting-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .call-copy strong, .setting-copy strong { font-size: 13px; }
+      .call-copy span, .setting-copy span { margin-top: 4px; color: var(--muted); font-size: 11px; }
+      .call-direction { color: var(--green); font-size: 18px; }
+      .empty-note { padding: 30px 12px; color: var(--muted); font-size: 13px; text-align: center; }
+      .mobile-nav { display: none; }
+      .toast { position: fixed; z-index: 20; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: min(420px, calc(100vw - 36px)); transform: translateY(12px); border-radius: 13px; padding: 13px 16px; background: #203b2c; box-shadow: var(--shadow); color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+      .toast.visible { transform: translateY(0); opacity: 1; }
+      .modal-backdrop { position: fixed; z-index: 15; inset: 0; display: grid; place-items: center; padding: 20px; background: #18251dcc; }
+      .modal { width: min(100%, 420px); border-radius: 23px; padding: 24px; background: var(--white); box-shadow: var(--shadow); }
+      .modal-heading { display: flex; align-items: center; justify-content: space-between; }
+      .modal-heading h2 { margin: 0; font-size: 21px; letter-spacing: -.7px; }
+      .modal .field { margin-top: 18px; }
+      .modal .primary-button { width: 100%; margin-top: 8px; }
+
+      @media (max-width: 700px) {
+        html, body { background: var(--white); }
+        .auth-card { padding: 27px 23px; border-radius: 24px; }
+        .workspace { display: block; width: 100%; }
+        .sidebar { position: absolute; inset: 0; z-index: 2; border: 0; padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
+        .sidebar-top { padding: 15px 17px 9px; }
+        .brand-row .brand-mark { font-size: 17px; }
+        .brand-row .brand-icon { width: 34px; height: 34px; }
+        .user-pill { display: none; }
+        .sidebar-navigation { display: none; }
+        .sidebar-heading { margin-top: 19px; }
+        .sidebar-heading h1 { font-size: 23px; }
+        .sidebar-footer { display: none; }
+        .main-panel { position: absolute; inset: 0; z-index: 3; display: none; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+        .workspace.mobile-chat-open .sidebar { display: none; }
+        .workspace.mobile-chat-open .main-panel { display: flex; }
+        .mobile-header { display: flex; min-height: 61px; align-items: center; gap: 9px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+        .mobile-header .brand-mark { font-size: 16px; }
+        .mobile-header .user-pill { display: flex; margin: 0 0 0 auto; border: 0; padding: 0; background: transparent; }
+        .mobile-header .user-pill-copy { display: none; }
+        .mobile-header .icon-button { width: 36px; height: 36px; }
+        .conversation-header { min-height: 68px; padding: 10px 14px; }
+        .conversation-header .icon-button { width: 36px; height: 36px; }
+        .conversation-header .avatar { width: 40px; height: 40px; border-radius: 14px; }
+        .header-actions .icon-button:nth-child(n+2) { display: none; }
+        .message-scroll { gap: 9px; padding: 17px 13px; }
+        .message { max-width: 88%; padding: 10px 11px 7px; }
+        .message-text { font-size: 13px; }
+        .composer { gap: 8px; padding: 10px 12px max(11px, env(safe-area-inset-bottom)); }
+        .composer textarea { min-height: 44px; padding: 12px; }
+        .send-button { width: 44px; height: 44px; }
+        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, 1fr); padding: 5px 6px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
+        .mobile-nav button { display: grid; align-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 12px; background: transparent; color: #78827a; font-size: 9px; font-weight: 700; cursor: pointer; }
+        .mobile-nav button.active { background: #edf2e8; color: var(--green); }
+        .mobile-nav svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+        .content-page { padding: 24px 17px; }
+        .content-page h1 { font-size: 26px; }
+        .toast { right: 13px; bottom: calc(78px + env(safe-area-inset-bottom)); left: 13px; max-width: none; text-align: center; }
+      }
+
+      @media (min-width: 701px) and (max-width: 960px) {
+        .workspace { height: calc(100% - 64px - env(safe-area-inset-bottom)); grid-template-columns: 280px minmax(0, 1fr); }
+        .sidebar-top { padding-right: 15px; padding-left: 15px; }
+        .conversation-header { padding-right: 17px; padding-left: 17px; }
+        .message-scroll { padding-right: 25px; padding-left: 25px; }
+      }
+
+      @media (min-width: 701px) and (max-width: 1024px) {
+        .sidebar-navigation { display: none; }
+        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, 1fr); padding: 5px 8px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
+        .mobile-nav button { display: grid; align-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 12px; background: transparent; color: #78827a; font-size: 9px; font-weight: 700; cursor: pointer; }
+        .mobile-nav button.active { background: #edf2e8; color: var(--green); }
+        .mobile-nav svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      }
+
+      @media (min-width: 961px) and (max-width: 1024px) {
+        .workspace { height: calc(100% - 64px - env(safe-area-inset-bottom)); }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <iframe
-        title="Chatter mobile and tablet app"
-        src="index.html?app=1"
-        allow="autoplay; camera; microphone; display-capture"
-        referrerpolicy="same-origin"
-      ></iframe>
+    <section class="auth-screen" id="authScreen" aria-label="Chatter account">
+      <div class="auth-card">
+        <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
+        <h1 id="authTitle">Good conversations start here.</h1>
+        <p class="auth-intro" id="authIntro">Sign in to pick up where you left off and see what your people are sharing.</p>
+        <form id="loginForm">
+          <div class="field"><label for="loginEmail">Email address</label><input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="254" /></div>
+          <div class="field"><label for="loginPassword">Password</label><input id="loginPassword" type="password" autocomplete="current-password" placeholder="Your password" required maxlength="128" /></div>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="primary-button" type="submit">Sign in <span aria-hidden="true">→</span></button>
+          <p class="auth-switch">New to Chatter? <button class="text-button" type="button" data-auth-mode="register">Create an account</button></p>
+        </form>
+        <form id="registerForm" hidden>
+          <div class="field"><label for="registerName">Your name</label><input id="registerName" autocomplete="name" placeholder="Name people know you by" required maxlength="40" minlength="2" /></div>
+          <div class="field"><label for="registerPhone">Nigerian phone number</label><input id="registerPhone" type="tel" autocomplete="tel" placeholder="+234 801 234 5678" required /></div>
+          <div class="field"><label for="registerEmail">Email address</label><input id="registerEmail" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="254" /></div>
+          <div class="field"><label for="registerPassword">Create a password</label><input id="registerPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" required minlength="8" maxlength="128" /></div>
+          <p class="form-error" id="registerError" role="alert"></p>
+          <button class="primary-button" type="submit">Continue <span aria-hidden="true">→</span></button>
+          <p class="auth-switch">Already have an account? <button class="text-button" type="button" data-auth-mode="login">Sign in</button></p>
+        </form>
+        <form id="verifyForm" hidden>
+          <div class="field"><label for="verifyCode">Six-digit email code</label><input id="verifyCode" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" required minlength="6" maxlength="6" pattern="[0-9]{6}" /></div>
+          <p class="form-error" id="verifyError" role="alert"></p>
+          <button class="primary-button" type="submit">Verify and create account</button>
+          <p class="auth-switch"><button class="text-button" type="button" data-auth-mode="register">Back to sign up</button></p>
+        </form>
+        <div class="auth-note"><span aria-hidden="true">✦</span><span>Your conversations stay connected to your Chatter account. Sign in here to use your existing chats.</span></div>
+      </div>
+    </section>
+
+    <main class="workspace" id="workspace" hidden>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <div class="brand-row">
+            <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
+            <button class="icon-button" type="button" id="newChatButton" aria-label="Start a conversation" title="Start a conversation">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          </div>
+          <div class="user-pill" id="desktopUser"></div>
+          <nav class="sidebar-navigation" aria-label="App navigation">
+            <button type="button" class="active" data-page="chats">Chats</button>
+            <button type="button" data-page="communities">Groups</button>
+            <button type="button" data-page="calls">Calls</button>
+            <button type="button" data-page="settings">Settings</button>
+          </nav>
+          <div class="sidebar-heading"><h1 id="listTitle">Your chats</h1><span id="chatCount" class="page-description" style="margin:0"></span></div>
+          <label class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+            <input id="chatSearch" type="search" placeholder="Search conversations" autocomplete="off" />
+          </label>
+          <div class="filters" id="filters">
+            <button class="filter-button active" type="button" data-filter="all">All</button>
+            <button class="filter-button" type="button" data-filter="unread">Unread</button>
+            <button class="filter-button" type="button" data-filter="groups">Groups</button>
+          </div>
+        </div>
+        <div class="conversation-list" id="conversationList" role="list"></div>
+        <div class="sidebar-footer">A little closer, wherever you are.</div>
+      </aside>
+
+      <section class="main-panel" id="mainPanel" aria-live="polite">
+        <div class="mobile-header">
+          <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
+          <div class="user-pill" id="mobileUser"></div>
+        </div>
+        <div id="panelContent" class="empty-state"></div>
+      </section>
     </main>
+
+    <nav class="mobile-nav" id="mobileNav" aria-label="App navigation" hidden>
+      <button class="active" type="button" data-page="chats" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2 1-4.2A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg>Chats</button>
+      <button type="button" data-page="communities"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 19c.4-3 2.4-4.5 5.5-4.5s5.1 1.5 5.5 4.5M15 14.8c2.8-.4 4.7 1.1 5.3 3.7" /></svg>Groups</button>
+      <button type="button" data-page="calls"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5C3 13.6 10.4 21 19.5 21a1.5 1.5 0 0 0 1.5-1.5V17l-5-2-2 2c-3-1.2-5.3-3.5-6.5-6.5l2-2L7 3Z" /></svg>Calls</button>
+      <button type="button" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.2 1-1.5 2.6-1.5-.6a7.6 7.6 0 0 1-1.7 1l-.2 1.6h-3l-.2-1.6a7.6 7.6 0 0 1-1.7-1l-1.5.6-1.5-2.6 1.2-1a7 7 0 0 1 0-2l-1.2-1 1.5-2.6 1.5.6a7.6 7.6 0 0 1 1.7-1l.2-1.6h3l.2 1.6a7.6 7.6 0 0 1 1.7 1l1.5-.6 1.5 2.6-1.2 1a7 7 0 0 1 0 2Z" /></svg>Settings</button>
+    </nav>
+
+    <div class="modal-backdrop" id="newChatModal" hidden>
+      <form class="modal" id="newChatForm">
+        <div class="modal-heading"><h2>Start a conversation</h2><button class="icon-button" id="closeNewChat" type="button" aria-label="Close">×</button></div>
+        <p class="page-description" style="margin-top:8px">Add someone using their Chatter phone number.</p>
+        <div class="field"><label for="contactName">Name</label><input id="contactName" autocomplete="name" placeholder="Their name" required minlength="2" maxlength="40" /></div>
+        <div class="field"><label for="contactPhone">Phone number</label><input id="contactPhone" type="tel" autocomplete="tel" placeholder="+234 801 234 5678" required /></div>
+        <p class="form-error" id="contactError" role="alert"></p>
+        <button class="primary-button" type="submit">Find and chat</button>
+      </form>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script>
+      (() => {
+        const $ = (selector) => document.querySelector(selector);
+        const state = { user: null, chats: [], activeId: null, page: "chats", filter: "all", search: "", pendingEmail: "" };
+        let toastTimer;
+        let events;
+
+        const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (character) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+        })[character]);
+
+        async function api(path, options = {}) {
+          const response = await fetch(path, {
+            ...options,
+            credentials: "same-origin",
+            headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers }
+          });
+          let result;
+          try { result = await response.json(); }
+          catch { throw new Error("The server returned an invalid response. Please try again."); }
+          if (!response.ok) throw new Error(result.error || result.message || "The request could not be completed.");
+          return result;
+        }
+
+        function toast(message) {
+          const node = $("#toast");
+          node.textContent = message;
+          node.classList.add("visible");
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => node.classList.remove("visible"), 3000);
+        }
+
+        function setAuthMode(mode) {
+          $("#loginForm").hidden = mode !== "login";
+          $("#registerForm").hidden = mode !== "register";
+          $("#verifyForm").hidden = mode !== "verify";
+          $("#authTitle").textContent = mode === "verify" ? "Check your inbox." : mode === "register" ? "Make yourself at home." : "Good conversations start here.";
+          $("#authIntro").textContent = mode === "verify"
+            ? `Enter the code we sent to ${state.pendingEmail}.`
+            : mode === "register" ? "Create your account and bring your conversations together." : "Sign in to pick up where you left off and see what your people are sharing.";
+          $("#loginError").textContent = "";
+          $("#registerError").textContent = "";
+          $("#verifyError").textContent = "";
+        }
+
+        function initials(name = "") {
+          return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "?";
+        }
+
+        function avatar(user, small = false) {
+          const size = small ? " small" : "";
+          const photo = user.avatarUrl ? `<img src="${escapeHtml(user.avatarUrl)}" alt="" />` : escapeHtml(user.initials || initials(user.name));
+          return `<span class="avatar${size}" aria-hidden="true">${photo}</span>`;
+        }
+
+        function personPill() {
+          const content = `${avatar({ ...state.user, initials: initials(state.user.name) }, true)}<span class="user-pill-copy"><strong>${escapeHtml(state.user.name)}</strong><span>${escapeHtml(state.user.email || "Chatter account")}</span></span>`;
+          $("#desktopUser").innerHTML = `${content}<button class="icon-button" type="button" data-page="settings" aria-label="Open settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19 13 2 1.5-2 3.4-2.4-.8a8 8 0 0 1-1.5.9l-.4 2.5h-4l-.4-2.5a8 8 0 0 1-1.5-.9l-2.4.8-2-3.4L6.3 13a8 8 0 0 1 0-2L4.4 9.5l2-3.4 2.4.8a8 8 0 0 1 1.5-.9l.4-2.5h4l.4 2.5a8 8 0 0 1 1.5.9l2.4-.8 2 3.4L19 11a8 8 0 0 1 0 2Z" /></svg></button>`;
+          $("#mobileUser").innerHTML = `${avatar({ ...state.user, initials: initials(state.user.name) }, true)}<button class="icon-button" type="button" data-page="settings" aria-label="Open settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="m19 13 2 1.5-2 3.4-2.4-.8a8 8 0 0 1-1.5.9l-.4 2.5h-4l-.4-2.5a8 8 0 0 1-1.5-.9l-2.4.8-2-3.4L6.3 13a8 8 0 0 1 0-2L4.4 9.5l2-3.4 2.4.8a8 8 0 0 1 1.5-.9l.4-2.5h4l.4 2.5a8 8 0 0 1 1.5.9l2.4-.8 2 3.4L19 11a8 8 0 0 1 0 2Z" /></svg></button>`;
+        }
+
+        function activeChat() {
+          return state.chats.find((chat) => chat.id === state.activeId) || null;
+        }
+
+        function visibleChats() {
+          return state.chats.filter((chat) => {
+            const matchesFilter = state.filter === "all" ||
+              (state.filter === "unread" && chat.unread > 0) ||
+              (state.filter === "groups" && chat.group);
+            return matchesFilter && `${chat.name} ${chat.preview}`.toLowerCase().includes(state.search.toLowerCase());
+          });
+        }
+
+        function renderList() {
+          const chats = visibleChats();
+          $("#chatCount").textContent = String(chats.length);
+          $("#listTitle").textContent = state.page === "communities" ? "Your groups" : "Your chats";
+          $("#filters").hidden = state.page === "communities";
+          $("#conversationList").innerHTML = chats.length ? chats.map((chat) => `
+            <button class="conversation-item${chat.id === state.activeId ? " active" : ""}" type="button" role="listitem" data-chat-id="${escapeHtml(chat.id)}" aria-current="${chat.id === state.activeId ? "true" : "false"}">
+              ${avatar(chat)}
+              <span class="conversation-info">
+                <span class="conversation-top"><strong>${escapeHtml(chat.name)}</strong><time>${escapeHtml(chat.time || "")}</time></span>
+                <span class="conversation-bottom"><span>${chat.online ? '<i class="online-dot"></i>' : ""}${escapeHtml(chat.preview || (chat.group ? "A new group conversation" : "Start a conversation"))}</span></span>
+              </span>
+            </button>`).join("") : `<div class="empty-note">${state.page === "communities" ? "Your groups will show up here." : state.search ? "No conversations match that search." : "No conversations yet. Start one with the + button."}</div>`;
+          document.querySelectorAll(".filter-button").forEach((button) => {
+            button.classList.toggle("active", button.dataset.filter === state.filter);
+          });
+        }
+
+        function messageMarkup(message) {
+          const image = message.attachment?.url ? `<img class="message-image" src="${escapeHtml(message.attachment.url)}" alt="${escapeHtml(message.attachment.name || "Shared image")}" />` : "";
+          const call = message.call ? `${message.call.type === "audio" ? "Voice" : "Video"} call${message.call.status ? ` · ${escapeHtml(message.call.status)}` : ""}` : "";
+          return `<article class="message${message.from === "you" ? " outgoing" : ""}">
+            ${message.sender ? `<span class="message-sender">${escapeHtml(message.sender)}</span>` : ""}
+            ${image}<p class="message-text">${escapeHtml(message.text || call)}</p>
+            <time class="message-time">${escapeHtml(message.time || "")}</time>
+          </article>`;
+        }
+
+        function renderConversation(chat) {
+          if (!chat) {
+            $("#panelContent").className = "empty-state";
+            $("#panelContent").innerHTML = `<span class="empty-art" aria-hidden="true">✳</span><h2>A good place to catch up.</h2><p>Choose a conversation to see the latest messages, or start a new one with someone you know.</p>`;
+            return;
+          }
+          $("#panelContent").className = "";
+          $("#panelContent").innerHTML = `
+            <div class="conversation-header">
+              <button class="icon-button mobile-back" type="button" data-action="back" aria-label="Back to chats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg></button>
+              ${avatar(chat)}
+              <span class="conversation-title"><strong>${escapeHtml(chat.name)}</strong><span>${chat.online ? '<i class="online-dot"></i>Online now' : escapeHtml(chat.status || (chat.group ? "Group conversation" : "Chatter contact"))}</span></span>
+              <span class="header-actions">
+                <button class="icon-button" type="button" data-action="search-messages" aria-label="Search in chat"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg></button>
+              </span>
+            </div>
+            <div class="message-scroll" id="messageScroll">
+              ${chat.messages.length ? `<span class="day-label">Your conversation</span>${chat.messages.map(messageMarkup).join("")}` : `<div class="empty-state"><span class="empty-art" aria-hidden="true">✦</span><h2>Say hello to ${escapeHtml(chat.name.split(" ")[0])}.</h2><p>This is the start of your conversation.</p></div>`}
+            </div>
+            <form class="composer" id="messageForm">
+              <textarea id="messageInput" maxlength="4000" rows="1" placeholder="Write a message..." aria-label="Write a message"></textarea>
+              <button class="send-button" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-3.8-7.7L2 9.5 21 3Z" /><path d="M9.7 13.3 21 3" /></svg></button>
+            </form>`;
+          const scroller = $("#messageScroll");
+          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+        }
+
+        function callRows() {
+          return state.chats.flatMap((chat) => chat.messages.filter((message) => message.call).map((message) => ({ chat, message })))
+            .sort((a, b) => (b.message.createdAt || "").localeCompare(a.message.createdAt || ""));
+        }
+
+        function renderPage() {
+          renderList();
+          document.querySelectorAll(".mobile-nav [data-page]").forEach((button) => {
+            const selected = button.dataset.page === state.page;
+            button.classList.toggle("active", selected);
+            if (selected) button.setAttribute("aria-current", "page");
+            else button.removeAttribute("aria-current");
+          });
+          document.querySelectorAll(".sidebar-navigation [data-page]").forEach((button) => {
+            button.classList.toggle("active", button.dataset.page === state.page);
+          });
+          const panel = $("#panelContent");
+          if (state.page === "chats") {
+            renderConversation(activeChat());
+          } else if (state.page === "communities") {
+            panel.className = "empty-state";
+            panel.innerHTML = `<span class="empty-art" aria-hidden="true">✿</span><h2>Find your people.</h2><p>Your group conversations are gathered in the list. Tap any group to open it and join the conversation.</p>`;
+          } else if (state.page === "calls") {
+            const calls = callRows();
+            panel.className = "content-page";
+            panel.innerHTML = `<h1>Calls</h1><p class="page-description">Your recent voice and video conversations.</p>${calls.length ? calls.map(({ chat, message }) => `<button class="call-card" type="button" data-chat-id="${escapeHtml(chat.id)}">
+              ${avatar(chat, true)}<span class="call-copy"><strong>${escapeHtml(chat.name)}</strong><span>${message.call.type === "audio" ? "Voice" : "Video"} · ${escapeHtml(message.call.status || "Call")} · ${escapeHtml(message.time || "")}</span></span>
+              <span class="call-direction" aria-hidden="true">${message.from === "you" ? "↗" : "↙"}</span></button>`).join("") : `<div class="empty-note">When you have calls, your recent history will appear here.</div>`}`;
+          } else {
+            panel.className = "content-page";
+            panel.innerHTML = `<h1>Your space</h1><p class="page-description">Manage your account and this device.</p>
+              <div class="settings-card">${avatar({ ...state.user, initials: initials(state.user.name) }, true)}<span class="setting-copy"><strong>${escapeHtml(state.user.name)}</strong><span>${escapeHtml(state.user.email || "")}</span></span></div>
+              <div class="settings-card"><span class="setting-copy"><strong>Messages that matter</strong><span>Your Chatter conversations are shared across your signed-in devices.</span></span></div>
+              <button class="primary-button" type="button" data-action="logout" style="margin-top:10px">Sign out</button>`;
+          }
+          const mobile = window.matchMedia("(max-width: 700px)").matches;
+          $("#workspace").classList.toggle("mobile-chat-open", mobile && (state.page !== "chats" || Boolean(activeChat())));
+          $("#mainPanel").hidden = false;
+          $("#mobileNav").hidden = !window.matchMedia("(max-width: 1024px)").matches;
+        }
+
+        function openWorkspace(result) {
+          state.user = result.user;
+          state.chats = Array.isArray(result.chats) ? result.chats : [];
+          state.activeId = state.chats[0]?.id || null;
+          state.page = "chats";
+          $("#authScreen").hidden = true;
+          $("#workspace").hidden = false;
+          $("#mobileNav").hidden = false;
+          personPill();
+          renderPage();
+          subscribeToEvents();
+        }
+
+        function subscribeToEvents() {
+          events?.close();
+          events = new EventSource("/api/events");
+          events.addEventListener("message", (event) => {
+            try {
+              const update = JSON.parse(event.data);
+              if (update.type !== "chats" || !Array.isArray(update.chats)) return;
+              state.chats = update.chats;
+              if (!state.chats.some((chat) => chat.id === state.activeId)) state.activeId = state.chats[0]?.id || null;
+              renderPage();
+            } catch (error) {
+              console.error("Could not read the live chat update.", error);
+            }
+          });
+          events.onerror = () => {
+            if (events?.readyState === EventSource.CLOSED) toast("Live updates disconnected. Refresh to reconnect.");
+          };
+        }
+
+        function showAuth(errorMessage) {
+          events?.close();
+          $("#workspace").hidden = true;
+          $("#mobileNav").hidden = true;
+          $("#authScreen").hidden = false;
+          setAuthMode("login");
+          if (errorMessage) $("#loginError").textContent = errorMessage;
+        }
+
+        document.addEventListener("click", async (event) => {
+          const authButton = event.target.closest("[data-auth-mode]");
+          if (authButton) return setAuthMode(authButton.dataset.authMode);
+
+          const pageButton = event.target.closest("[data-page]");
+          if (pageButton) {
+            state.page = pageButton.dataset.page;
+            if (state.page === "communities") state.filter = "groups";
+            else if (state.page === "chats" && state.filter === "groups") state.filter = "all";
+            renderPage();
+            return;
+          }
+
+          const filterButton = event.target.closest("[data-filter]");
+          if (filterButton) {
+            state.filter = filterButton.dataset.filter;
+            renderList();
+            return;
+          }
+
+          const chatButton = event.target.closest("[data-chat-id]");
+          if (chatButton) {
+            state.activeId = chatButton.dataset.chatId;
+            state.page = "chats";
+            renderPage();
+            return;
+          }
+
+          const action = event.target.closest("[data-action]")?.dataset.action;
+          if (action === "back") {
+            state.activeId = null;
+            renderPage();
+          } else if (action === "logout") {
+            try {
+              await api("/api/logout", { method: "POST" });
+              showAuth();
+              toast("You are signed out.");
+            } catch (error) {
+              toast(error.message);
+            }
+          } else if (action === "search-messages") {
+            const query = prompt("Search messages in this conversation:");
+            if (query === null || !query.trim()) return;
+            const chat = activeChat();
+            const match = chat?.messages.find((message) => (message.text || "").toLowerCase().includes(query.trim().toLowerCase()));
+            if (!match) toast("No matching messages in this conversation.");
+            else {
+              const scroll = $("#messageScroll");
+              const textNode = [...scroll.querySelectorAll(".message-text")].find((node) => node.textContent.toLowerCase().includes(query.trim().toLowerCase()));
+              textNode?.closest(".message").scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }
+        });
+
+        $("#chatSearch").addEventListener("input", (event) => {
+          state.search = event.target.value.trim();
+          renderList();
+        });
+
+        $("#loginForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          button.disabled = true;
+          $("#loginError").textContent = "";
+          try {
+            const result = await api("/api/login", {
+              method: "POST",
+              body: JSON.stringify({ email: $("#loginEmail").value.trim(), password: $("#loginPassword").value })
+            });
+            openWorkspace(result);
+          } catch (error) {
+            $("#loginError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        $("#registerForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          button.disabled = true;
+          $("#registerError").textContent = "";
+          try {
+            const email = $("#registerEmail").value.trim();
+            await api("/api/register/send-code", {
+              method: "POST",
+              body: JSON.stringify({
+                name: $("#registerName").value.trim(),
+                phone: $("#registerPhone").value.trim(),
+                email,
+                password: $("#registerPassword").value
+              })
+            });
+            state.pendingEmail = email;
+            setAuthMode("verify");
+          } catch (error) {
+            $("#registerError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        $("#verifyForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          button.disabled = true;
+          $("#verifyError").textContent = "";
+          try {
+            const result = await api("/api/register/verify-code", {
+              method: "POST",
+              body: JSON.stringify({ email: state.pendingEmail, code: $("#verifyCode").value.trim() })
+            });
+            openWorkspace(result);
+          } catch (error) {
+            $("#verifyError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        document.addEventListener("submit", async (event) => {
+          if (event.target.id !== "messageForm") return;
+          event.preventDefault();
+          const input = $("#messageInput");
+          const text = input.value.trim();
+          const chat = activeChat();
+          if (!text || !chat) return;
+          const button = event.target.querySelector('button[type="submit"]');
+          button.disabled = true;
+          try {
+            await api(`/api/chats/${encodeURIComponent(chat.id)}/messages`, {
+              method: "POST",
+              body: JSON.stringify({ text })
+            });
+            input.value = "";
+            const result = await api("/api/chats");
+            state.chats = result.chats;
+            renderPage();
+          } catch (error) {
+            toast(error.message);
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        $("#newChatButton").addEventListener("click", () => {
+          $("#contactError").textContent = "";
+          $("#newChatModal").hidden = false;
+          $("#contactName").focus();
+        });
+        $("#closeNewChat").addEventListener("click", () => { $("#newChatModal").hidden = true; });
+        $("#newChatModal").addEventListener("click", (event) => {
+          if (event.target.id === "newChatModal") event.currentTarget.hidden = true;
+        });
+        $("#newChatForm").addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          button.disabled = true;
+          $("#contactError").textContent = "";
+          try {
+            const result = await api("/api/contacts", {
+              method: "POST",
+              body: JSON.stringify({ name: $("#contactName").value.trim(), phone: $("#contactPhone").value.trim() })
+            });
+            state.chats = [result.chat, ...state.chats.filter((chat) => chat.id !== result.chat.id)];
+            state.activeId = result.chat.id;
+            state.page = "chats";
+            $("#newChatModal").hidden = true;
+            event.currentTarget.reset();
+            renderPage();
+          } catch (error) {
+            $("#contactError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        window.addEventListener("resize", () => {
+          if (!$("#workspace").hidden) renderPage();
+        });
+
+        api("/api/session").then((result) => {
+          if (result.user) openWorkspace(result);
+          else setAuthMode("login");
+        }).catch((error) => {
+          console.error("Could not restore the Chatter session.", error);
+          showAuth(`Could not connect to Chatter: ${error.message}`);
+        });
+      })();
+    </script>
   </body>
 </html>
