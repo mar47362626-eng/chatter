@@ -2125,7 +2125,12 @@ async function handleApi(request, response, url) {
 }
 
 function serveStatic(request, response, url) {
-  const pathname = url.pathname === "/moderation" ? "/moderation.html" : url.pathname;
+  const pageRoutes = new Map([
+    ["/app", "/app.html"],
+    ["/app/", "/app.html"],
+    ["/moderation", "/moderation.html"]
+  ]);
+  const pathname = pageRoutes.get(url.pathname) || url.pathname;
   let requestedPath = decodeURIComponent(pathname === "/" ? "/index.html" : pathname);
   requestedPath = normalize(requestedPath).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
   const filePath = join(root, requestedPath);
