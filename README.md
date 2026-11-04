@@ -48,7 +48,7 @@ npm.cmd start
 
 ## Audio and video calls
 
-Users can start audio or video calls from a one-to-one conversation. The other person must be signed in with Chatter open to receive and answer the call. Allow microphone and camera access when the browser asks. Calls use WebRTC to send media between the two browsers; screen sharing is available during video calls.
+Users can start audio or video calls from a one-to-one conversation on the main site or the `/app` app page. The other person must be signed in with Chatter open and online to receive and answer the call; calls do not ring when Chatter is closed. Allow microphone and camera access when the browser asks. Calls use WebRTC to send media between the two browsers; screen sharing is available during video calls on the main site.
 
 Call entries are saved in the conversation. Both users can see whether a call was answered, declined, missed, or how long an answered call lasted.
 

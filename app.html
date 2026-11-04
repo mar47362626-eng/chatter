@@ -110,6 +110,42 @@
       .conversation-title strong { font-size: 14px; }
       .conversation-title span { margin-top: 4px; color: var(--muted); font-size: 11px; }
       .header-actions { display: flex; gap: 8px; }
+      .call-header-button { color: var(--green); }
+      .call-overlay { position: fixed; z-index: 35; inset: 0; display: grid; place-items: center; padding: 18px; background: #17251ed9; }
+      .call-dialog { width: min(100%, 410px); border: 1px solid var(--line); border-radius: 22px; padding: 25px; background: var(--white); box-shadow: var(--shadow); }
+      .call-dialog h2 { margin: 0 0 8px; font-size: 21px; }
+      .call-dialog p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .call-choice-actions { display: grid; gap: 9px; margin-top: 19px; }
+      .call-choice-button { display: flex; min-height: 62px; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 10px 13px; background: white; text-align: left; cursor: pointer; }
+      .call-choice-button:hover { border-color: #b7deca; background: #f4faf6; }
+      .call-choice-button:disabled { opacity: .6; cursor: wait; }
+      .call-choice-button strong, .call-choice-button small { display: block; }
+      .call-choice-button small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+      .call-choice-icon { display: grid; width: 40px; height: 40px; flex: 0 0 40px; place-items: center; border-radius: 50%; background: var(--green); color: white; font-size: 18px; }
+      .call-choice-icon.video { background: #5777c8; }
+      .call-error { min-height: 20px; color: #a43c35 !important; }
+      .call-actions { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+      .call-action-button { min-height: 43px; border: 0; border-radius: 13px; padding: 0 20px; background: var(--green); color: white; font-weight: 750; cursor: pointer; }
+      .call-action-button:disabled { opacity: .6; cursor: wait; }
+      .call-action-button.decline, .call-control-button.end { background: #dc4141; }
+      .call-session-overlay { z-index: 40; background: #101914f2; }
+      .call-session-card { display: flex; width: min(820px, 100%); max-height: 100%; flex-direction: column; gap: 14px; color: white; }
+      .call-session-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .call-session-heading h2 { margin: 4px 0; font-size: 19px; }
+      .call-session-heading p { margin: 0; color: #bac8c0; font-size: 12px; }
+      .call-duration { color: #d3ded7; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .call-preview-stage { position: relative; display: grid; min-height: min(58vh, 470px); place-items: center; overflow: hidden; border: 1px solid #ffffff22; border-radius: 18px; background: radial-gradient(ellipse at 50% 40%, #324e41, #14221b 68%); }
+      .call-preview-stage video { width: 100%; max-height: min(68vh, 560px); object-fit: contain; background: #0b110e; }
+      .call-preview-stage video[hidden] { display: none; }
+      .call-preview-stage #callPreviewVideo:not([hidden]) { position: absolute; z-index: 1; right: 12px; bottom: 12px; width: min(24vw, 170px); max-height: 25vh; border: 1px solid #ffffff80; border-radius: 12px; }
+      #remoteCallAudio { display: none; }
+      .audio-call-avatar { display: grid; width: 92px; height: 92px; place-items: center; border: 5px solid #ffffff20; border-radius: 50%; background: linear-gradient(145deg, #72bca1, #39866d); font-size: 27px; font-weight: 800; }
+      .audio-call-avatar[hidden] { display: none; }
+      .call-preview-caption { position: absolute; z-index: 2; right: 12px; bottom: 12px; left: 12px; color: #e2ebe5; text-align: center; font-size: 11px; text-shadow: 0 1px 5px #000; pointer-events: none; }
+      .call-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
+      .call-control-button { min-height: 42px; border: 1px solid #ffffff35; border-radius: 22px; padding: 0 15px; background: #ffffff14; color: white; cursor: pointer; font-size: 12px; font-weight: 650; }
+      .call-control-button:disabled { opacity: .6; cursor: wait; }
+      .toast { z-index: 50; }
       .message-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 24px clamp(16px, 5vw, 70px); background-color: #f8f8f2; background-image: radial-gradient(#d9e2d222 .8px, transparent .8px); background-size: 16px 16px; }
       .day-label { align-self: center; margin: 2px 0 8px; border: 1px solid #e8e9df; border-radius: 99px; padding: 6px 11px; background: #fffefaed; color: #758076; font-size: 10px; font-weight: 700; }
       .message { max-width: min(78%, 520px); padding: 11px 13px 8px; border: 1px solid #e8e9e1; border-radius: 5px 17px 17px 17px; background: white; box-shadow: 0 4px 12px #20301c08; overflow-wrap: anywhere; }
@@ -221,7 +257,13 @@
         .conversation-header { min-height: 68px; padding: 10px 14px; }
         .conversation-header .icon-button { width: 36px; height: 36px; }
         .conversation-header .avatar { width: 40px; height: 40px; border-radius: 14px; }
+        .call-session-overlay { padding: 12px; }
+        .call-session-card { width: 100%; }
+        .call-preview-stage { min-height: min(56vh, 430px); }
+        .call-controls { gap: 6px; }
+        .call-control-button { min-height: 40px; padding: 0 12px; font-size: 11px; }
         .header-actions .icon-button:nth-child(n+2) { display: none; }
+        .header-actions .call-header-button { display: grid; }
         .message-scroll { gap: 9px; padding: 17px 13px; }
         .message { max-width: 88%; padding: 10px 11px 7px; }
         .message-text { font-size: 13px; }
@@ -366,6 +408,55 @@
         <button class="primary-button" id="createGroupSubmit" type="submit">Create group</button>
       </form>
     </div>
+    <div class="call-overlay" id="callChoiceDialog" hidden>
+      <section class="call-dialog" role="dialog" aria-modal="true" aria-labelledby="callChoiceTitle">
+        <h2 id="callChoiceTitle">Start a call</h2>
+        <p>Choose how you would like to call. The other person must have Chatter open and online to receive it.</p>
+        <div class="call-choice-actions">
+          <button class="call-choice-button" type="button" id="startAudioCallButton">
+            <span class="call-choice-icon" aria-hidden="true">☎</span>
+            <span><strong>Audio call</strong><small>Use your microphone</small></span>
+          </button>
+          <button class="call-choice-button" type="button" id="startVideoCallButton">
+            <span class="call-choice-icon video" aria-hidden="true">▣</span>
+            <span><strong>Video call</strong><small>Use your camera and microphone</small></span>
+          </button>
+        </div>
+        <p class="call-error" id="callChoiceError" role="alert"></p>
+        <div class="call-actions"><button class="call-action-button" type="button" data-action="close-call-choice">Cancel</button></div>
+      </section>
+    </div>
+    <div class="call-overlay" id="incomingCallDialog" hidden>
+      <section class="call-dialog" role="alertdialog" aria-modal="true" aria-labelledby="incomingCallTitle">
+        <h2 id="incomingCallTitle">Incoming call</h2>
+        <p id="incomingCallDescription"></p>
+        <p class="call-error" id="incomingCallError" role="alert"></p>
+        <div class="call-actions">
+          <button class="call-action-button" type="button" id="acceptCallButton">Answer</button>
+          <button class="call-action-button decline" type="button" id="declineCallButton">Decline</button>
+        </div>
+      </section>
+    </div>
+    <div class="call-overlay call-session-overlay" id="callSessionDialog" hidden>
+      <section class="call-session-card" role="dialog" aria-modal="true" aria-labelledby="callSessionTitle">
+        <div class="call-session-heading">
+          <div><small>CHATTER CALL</small><h2 id="callSessionTitle"></h2><p id="callSessionStatus">Connecting…</p></div>
+          <span class="call-duration" id="callDuration">00:00</span>
+        </div>
+        <div class="call-preview-stage">
+          <video id="remoteCallVideo" autoplay playsinline muted hidden></video>
+          <video id="callPreviewVideo" autoplay playsinline muted hidden></video>
+          <audio id="remoteCallAudio" autoplay></audio>
+          <div class="audio-call-avatar" id="audioCallAvatar"></div>
+          <div class="call-preview-caption" id="callPreviewCaption">Waiting for the other person to answer…</div>
+        </div>
+        <div class="call-controls">
+          <button class="call-control-button" type="button" id="toggleMicrophoneButton">Mute mic</button>
+          <button class="call-control-button" type="button" id="toggleCameraButton" hidden>Turn camera off</button>
+          <button class="call-control-button end" type="button" id="endCallButton">End call</button>
+        </div>
+      </section>
+    </div>
     <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -391,6 +482,14 @@
         let toastTimer;
         let events;
         let pendingInstallPrompt = null;
+        let incomingCall = null;
+        let activeCall = null;
+        let callMediaStream = null;
+        let callStartedAt = 0;
+        let callDurationTimer = 0;
+        let callDisconnectTimer = 0;
+        let microphoneEnabled = true;
+        let cameraEnabled = true;
 
         function finishBoot() {
           $("#bootScreen").classList.add("is-done");
@@ -450,6 +549,364 @@
           $("#mobileUser").innerHTML = `${avatar({ ...state.user, initials: initials(state.user.name) }, true)}<button class="icon-button" type="button" data-page="settings" aria-label="Open settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="m19 13 2 1.5-2 3.4-2.4-.8a8 8 0 0 1-1.5.9l-.4 2.5h-4l-.4-2.5a8 8 0 0 1-1.5-.9l-2.4.8-2-3.4L6.3 13a8 8 0 0 1 0-2L4.4 9.5l2-3.4 2.4.8a8 8 0 0 1 1.5-.9l.4-2.5h4l.4 2.5a8 8 0 0 1 1.5.9l2.4-.8 2 3.4L19 11a8 8 0 0 1 0 2Z" /></svg></button>`;
         }
 
+        function formatCallDuration(seconds) {
+          return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+        }
+
+        function callMediaErrorMessage(error, type) {
+          if (error.name === "NotAllowedError" || error.name === "PermissionDeniedError") {
+            return "Allow microphone access in your browser. Video calls also need camera access.";
+          }
+          if (error.name === "NotFoundError") {
+            return type === "video" ? "No compatible microphone or camera was found. Try an audio call." : "No compatible microphone was found.";
+          }
+          if (error.name === "AbortError" || error.name === "NotReadableError") {
+            return "The microphone or camera could not start. Close other apps using it and try again.";
+          }
+          if (error.name === "SecurityError") return "Microphone and camera access requires a secure HTTPS connection.";
+          return "The microphone or camera could not be opened. Check your device and browser permissions.";
+        }
+
+        function releaseCallMedia() {
+          if (callDurationTimer) window.clearInterval(callDurationTimer);
+          if (callDisconnectTimer) window.clearTimeout(callDisconnectTimer);
+          callDurationTimer = 0;
+          callDisconnectTimer = 0;
+          const peerConnection = activeCall?.peerConnection;
+          if (peerConnection) {
+            peerConnection.onicecandidate = null;
+            peerConnection.ontrack = null;
+            peerConnection.onconnectionstatechange = null;
+            peerConnection.close();
+          }
+          callMediaStream?.getTracks().forEach((track) => track.stop());
+          callMediaStream = null;
+          callStartedAt = 0;
+          for (const selector of ["#callPreviewVideo", "#remoteCallVideo", "#remoteCallAudio"]) {
+            const media = $(selector);
+            media.pause?.();
+            media.srcObject = null;
+          }
+          $("#callPreviewVideo").hidden = true;
+          $("#remoteCallVideo").hidden = true;
+        }
+
+        function closeCallUi() {
+          activeCall = null;
+          incomingCall = null;
+          releaseCallMedia();
+          $("#callChoiceDialog").hidden = true;
+          $("#incomingCallDialog").hidden = true;
+          $("#callSessionDialog").hidden = true;
+        }
+
+        async function endCall() {
+          const callId = activeCall?.id;
+          if (callId) {
+            try {
+              await api(`/api/calls/${encodeURIComponent(callId)}/end`, { method: "POST" });
+            } catch (error) {
+              console.error("Could not notify the other person that the call ended:", error);
+              toast(`Call ended here, but the other person may not be notified: ${error.message}`);
+            }
+          }
+          closeCallUi();
+        }
+
+        async function sendCallSignal(call, signalType, data) {
+          if (!call.id || activeCall !== call) return;
+          await api(`/api/calls/${encodeURIComponent(call.id)}/signal`, {
+            method: "POST",
+            body: JSON.stringify({ signalType, data })
+          });
+        }
+
+        async function createCallPeerConnection(call) {
+          const config = await api("/api/rtc-config");
+          if (activeCall !== call) throw new Error("The call ended before a connection could be made.");
+          const peerConnection = new RTCPeerConnection({ iceServers: config.iceServers });
+          call.peerConnection = peerConnection;
+          for (const track of callMediaStream.getTracks()) peerConnection.addTrack(track, callMediaStream);
+
+          peerConnection.onicecandidate = (event) => {
+            if (!event.candidate || activeCall !== call) return;
+            sendCallSignal(call, "candidate", event.candidate.toJSON()).catch((error) => {
+              console.error("Could not send call network information:", error);
+              toast(`Call connection issue: ${error.message}`);
+            });
+          };
+          peerConnection.ontrack = (event) => {
+            if (activeCall !== call || !event.streams[0]) return;
+            const remoteStream = event.streams[0];
+            const remoteAudio = $("#remoteCallAudio");
+            if (remoteAudio.srcObject !== remoteStream) {
+              remoteAudio.srcObject = remoteStream;
+              remoteAudio.play().catch((error) => {
+                if (error.name !== "AbortError" && activeCall === call) toast("Tap the call window to allow audio playback.");
+              });
+            }
+            if (call.type === "video" && event.track.kind === "video") {
+              const video = $("#remoteCallVideo");
+              if (video.srcObject !== remoteStream) video.srcObject = remoteStream;
+              video.hidden = false;
+              $("#callPreviewVideo").hidden = false;
+              $("#audioCallAvatar").hidden = true;
+              video.play().catch((error) => {
+                if (error.name !== "AbortError" && activeCall === call) toast("The other person's video could not be displayed.");
+              });
+            }
+          };
+          peerConnection.onconnectionstatechange = () => {
+            if (activeCall !== call) return;
+            if (peerConnection.connectionState === "connected") {
+              if (callDisconnectTimer) window.clearTimeout(callDisconnectTimer);
+              callDisconnectTimer = 0;
+              $("#callSessionStatus").textContent = `Connected with ${call.peerName}.`;
+              $("#callPreviewCaption").textContent = "Call connected.";
+              if (!callStartedAt) {
+                callStartedAt = Date.now();
+                callDurationTimer = window.setInterval(() => {
+                  $("#callDuration").textContent = formatCallDuration(Math.floor((Date.now() - callStartedAt) / 1000));
+                }, 1000);
+              }
+            } else if (peerConnection.connectionState === "disconnected") {
+              $("#callSessionStatus").textContent = "Connection interrupted. Trying to reconnect…";
+              if (!callDisconnectTimer) {
+                callDisconnectTimer = window.setTimeout(() => {
+                  callDisconnectTimer = 0;
+                  if (activeCall === call && peerConnection.connectionState !== "connected") {
+                    toast("The call ended because the connection was lost.");
+                    endCall();
+                  }
+                }, 15000);
+              }
+            } else if (peerConnection.connectionState === "failed") {
+              $("#callSessionStatus").textContent = "Could not connect. Check the network and try again.";
+              toast("The call could not connect. Some networks require a TURN relay.");
+              endCall();
+            }
+          };
+          return peerConnection;
+        }
+
+        function showCallSession(call, outgoing) {
+          $("#callChoiceDialog").hidden = true;
+          $("#incomingCallDialog").hidden = true;
+          $("#callSessionTitle").textContent = `${call.type === "video" ? "Video" : "Audio"} call with ${call.peerName}`;
+          $("#callSessionStatus").textContent = outgoing ? `Calling ${call.peerName}…` : "Connecting…";
+          $("#callPreviewCaption").textContent = outgoing ? "Waiting for the other person to answer…" : "Joining the call…";
+          $("#audioCallAvatar").textContent = initials(call.peerName);
+          $("#audioCallAvatar").hidden = call.type === "video";
+          $("#callPreviewVideo").hidden = call.type !== "video";
+          $("#remoteCallVideo").hidden = true;
+          $("#toggleCameraButton").hidden = call.type !== "video";
+          $("#toggleMicrophoneButton").textContent = "Mute mic";
+          $("#toggleCameraButton").textContent = "Turn camera off";
+          $("#callDuration").textContent = "00:00";
+          $("#callSessionDialog").hidden = false;
+          if (call.type === "video") {
+            const video = $("#callPreviewVideo");
+            video.srcObject = callMediaStream;
+            video.play().catch((error) => {
+              if (error.name !== "AbortError") toast("Your camera preview could not be displayed.");
+            });
+          }
+        }
+
+        async function startCall(type) {
+          const chat = activeChat();
+          const error = $("#callChoiceError");
+          if (!chat || chat.group || chat.self || !chat.contactId) {
+            error.textContent = "Calls are available only in a one-to-one conversation.";
+            return;
+          }
+          if (activeCall || incomingCall) {
+            error.textContent = "Finish your current call before starting another.";
+            return;
+          }
+          if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
+            error.textContent = "Calls require a supported browser and a secure HTTPS connection.";
+            return;
+          }
+          const buttons = [$("#startAudioCallButton"), $("#startVideoCallButton")];
+          buttons.forEach((button) => { button.disabled = true; });
+          try {
+            callMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === "video" });
+          } catch (error) {
+            console.warn("Could not open call media:", error);
+            $("#callChoiceError").textContent = callMediaErrorMessage(error, type);
+            buttons.forEach((button) => { button.disabled = false; });
+            return;
+          }
+          microphoneEnabled = true;
+          cameraEnabled = true;
+          activeCall = {
+            id: null, chatId: chat.id, type, role: "caller", peerName: chat.name,
+            peerConnection: null, pendingCandidates: []
+          };
+          try {
+            const result = await api("/api/calls", {
+              method: "POST",
+              body: JSON.stringify({ chatId: chat.id, type })
+            });
+            activeCall.id = result.callId;
+            showCallSession(activeCall, true);
+          } catch (error) {
+            console.error("Could not start the call:", error);
+            activeCall = null;
+            releaseCallMedia();
+            $("#callChoiceError").textContent = error.message;
+          } finally {
+            buttons.forEach((button) => { button.disabled = false; });
+          }
+        }
+
+        async function declineIncomingCall() {
+          if (!incomingCall) return;
+          const call = incomingCall;
+          $("#declineCallButton").disabled = true;
+          try {
+            await api(`/api/calls/${encodeURIComponent(call.callId)}/decline`, { method: "POST" });
+            closeCallUi();
+          } catch (error) {
+            console.error("Could not decline the incoming call:", error);
+            $("#incomingCallError").textContent = error.message;
+          } finally {
+            $("#declineCallButton").disabled = false;
+          }
+        }
+
+        async function acceptIncomingCall() {
+          if (!incomingCall || activeCall) return;
+          if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
+            $("#incomingCallError").textContent = "Answering calls requires a supported browser and a secure HTTPS connection.";
+            return;
+          }
+          const invitation = incomingCall;
+          const button = $("#acceptCallButton");
+          button.disabled = true;
+          $("#incomingCallError").textContent = "";
+          try {
+            callMediaStream = await navigator.mediaDevices.getUserMedia({
+              audio: true, video: invitation.callType === "video"
+            });
+            microphoneEnabled = true;
+            cameraEnabled = true;
+            activeCall = {
+              id: invitation.callId, chatId: invitation.chatId, type: invitation.callType,
+              role: "callee", peerName: invitation.callerName, peerConnection: null, pendingCandidates: []
+            };
+            await createCallPeerConnection(activeCall);
+            await api(`/api/calls/${encodeURIComponent(activeCall.id)}/accept`, { method: "POST" });
+            incomingCall = null;
+            showCallSession(activeCall, false);
+          } catch (error) {
+            console.error("Could not answer the incoming call:", error);
+            if (activeCall?.id === invitation.callId) {
+              try {
+                await api(`/api/calls/${encodeURIComponent(invitation.callId)}/end`, { method: "POST" });
+              } catch (endError) {
+                console.error("Could not close the unanswered call:", endError);
+              }
+              closeCallUi();
+            } else {
+              callMediaStream?.getTracks().forEach((track) => track.stop());
+              callMediaStream = null;
+              try {
+                await api(`/api/calls/${encodeURIComponent(invitation.callId)}/decline`, { method: "POST" });
+              } catch (declineError) {
+                console.error("Could not decline the call after media access failed:", declineError);
+              }
+              incomingCall = null;
+              $("#incomingCallDialog").hidden = true;
+            }
+            toast(`Could not answer the call: ${callMediaErrorMessage(error, invitation.callType)}`);
+          } finally {
+            button.disabled = false;
+          }
+        }
+
+        async function receiveCallSignal(event) {
+          const call = activeCall;
+          const peerConnection = call?.peerConnection;
+          if (!call || call.id !== event.callId || !peerConnection) return;
+          if (event.signalType === "candidate") {
+            if (peerConnection.remoteDescription) await peerConnection.addIceCandidate(new RTCIceCandidate(event.data));
+            else call.pendingCandidates.push(event.data);
+            return;
+          }
+          if (event.signalType === "offer" && call.role === "callee") {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(event.data));
+            for (const candidate of call.pendingCandidates.splice(0)) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            await sendCallSignal(call, "answer", peerConnection.localDescription.toJSON());
+          } else if (event.signalType === "answer" && call.role === "caller") {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(event.data));
+            for (const candidate of call.pendingCandidates.splice(0)) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+          }
+        }
+
+        async function handleCallEvent(event) {
+          if (event.action === "incoming") {
+            if (activeCall || incomingCall) {
+              try {
+                await api(`/api/calls/${encodeURIComponent(event.callId)}/decline`, { method: "POST" });
+              } catch (error) {
+                console.error("Could not decline another incoming call:", error);
+              }
+              return;
+            }
+            incomingCall = event;
+            $("#incomingCallTitle").textContent = `${event.callerName} is calling`;
+            $("#incomingCallDescription").textContent = `${event.callType === "video" ? "Video" : "Audio"} call`;
+            $("#incomingCallError").textContent = "";
+            $("#incomingCallDialog").hidden = false;
+            if (document.visibilityState === "visible") navigator.vibrate?.([250, 150, 250]);
+            return;
+          }
+          if (event.action === "accepted" && activeCall?.id === event.callId && activeCall.role === "caller") {
+            try {
+              const peerConnection = await createCallPeerConnection(activeCall);
+              const offer = await peerConnection.createOffer();
+              await peerConnection.setLocalDescription(offer);
+              await sendCallSignal(activeCall, "offer", peerConnection.localDescription.toJSON());
+              $("#callSessionStatus").textContent = `Connecting with ${activeCall.peerName}…`;
+            } catch (error) {
+              console.error("Could not establish the call:", error);
+              toast(`Could not establish the call: ${error.message}`);
+              await endCall();
+            }
+            return;
+          }
+          if (event.action === "signal") {
+            try {
+              await receiveCallSignal(event);
+            } catch (error) {
+              console.error("Could not process call connection data:", error);
+              toast(`Call connection issue: ${error.message}`);
+              await endCall();
+            }
+            return;
+          }
+          if (event.action === "declined" && activeCall?.id === event.callId) {
+            closeCallUi();
+            toast("The other person declined the call.");
+          } else if (event.action === "ended") {
+            if (activeCall?.id === event.callId) {
+              closeCallUi();
+              toast(event.reason === "no-answer" ? "The call was not answered." : "The call has ended.");
+            } else if (incomingCall?.callId === event.callId) {
+              closeCallUi();
+              toast("The incoming call has ended.");
+            }
+          }
+        }
+
         function activeChat() {
           return state.chats.find((chat) => chat.id === state.activeId) || null;
         }
@@ -504,6 +961,9 @@
               ${avatar(chat)}
               <span class="conversation-title"><strong>${escapeHtml(chat.name)}</strong><span>${chat.online ? '<i class="online-dot"></i>Online now' : escapeHtml(chat.status || (chat.group ? "Group conversation" : "Chatter contact"))}</span></span>
               <span class="header-actions">
+                ${chat.contactId && !chat.group && !chat.self ? `<button class="icon-button call-header-button" type="button" data-action="call-options" aria-label="Call ${escapeHtml(chat.name)}" title="Start an audio or video call">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 3.8 10 7.5 8.3 9.2a14 14 0 0 0 6.5 6.5l1.7-1.7 3.7 2.8-.8 3a1.5 1.5 0 0 1-1.7 1.1A18.8 18.8 0 0 1 3.1 6.3a1.5 1.5 0 0 1 1.1-1.7l3-.8Z" /></svg>
+                </button>` : ""}
                 <button class="icon-button" type="button" data-action="search-messages" aria-label="Search in chat"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg></button>
               </span>
             </div>
@@ -769,6 +1229,13 @@
           events.addEventListener("message", (event) => {
             try {
               const update = JSON.parse(event.data);
+              if (update.type === "call") {
+                handleCallEvent(update).catch((error) => {
+                  console.error("Could not handle a call update:", error);
+                  toast(`Call update failed: ${error.message}`);
+                });
+                return;
+              }
               if (update.type !== "chats" || !Array.isArray(update.chats)) return;
               state.chats = update.chats;
               if (!state.chats.some((chat) => chat.id === state.activeId)) state.activeId = state.chats[0]?.id || null;
@@ -822,6 +1289,24 @@
           }
 
           const action = event.target.closest("[data-action]")?.dataset.action;
+          if (action === "call-options") {
+            const chat = activeChat();
+            if (!chat || chat.group || chat.self || !chat.contactId) {
+              toast("Calls are available only in a one-to-one conversation.");
+              return;
+            }
+            if (activeCall || incomingCall) {
+              toast("Finish your current call before starting another.");
+              return;
+            }
+            $("#callChoiceError").textContent = "";
+            $("#callChoiceDialog").hidden = false;
+            return;
+          }
+          if (action === "close-call-choice") {
+            $("#callChoiceDialog").hidden = true;
+            return;
+          }
           if (event.target.closest("#installAppButton")) {
             if (!pendingInstallPrompt) {
               toast("Use your browser menu to install or add Chatter to your home screen.");
@@ -932,6 +1417,8 @@
           } else if (action === "logout") {
             if (!confirm("Sign out of Chatter on this device?")) return;
             try {
+              if (activeCall) await endCall();
+              else if (incomingCall) await declineIncomingCall();
               await api("/api/logout", { method: "POST" });
               showAuth();
               toast("You are signed out.");
@@ -1000,6 +1487,25 @@
               await loadNumberStore();
             }
           }
+        });
+
+        $("#startAudioCallButton").addEventListener("click", () => startCall("audio"));
+        $("#startVideoCallButton").addEventListener("click", () => startCall("video"));
+        $("#acceptCallButton").addEventListener("click", acceptIncomingCall);
+        $("#declineCallButton").addEventListener("click", declineIncomingCall);
+        $("#endCallButton").addEventListener("click", endCall);
+        $("#toggleMicrophoneButton").addEventListener("click", () => {
+          microphoneEnabled = !microphoneEnabled;
+          callMediaStream?.getAudioTracks().forEach((track) => { track.enabled = microphoneEnabled; });
+          $("#toggleMicrophoneButton").textContent = microphoneEnabled ? "Mute mic" : "Unmute mic";
+        });
+        $("#toggleCameraButton").addEventListener("click", () => {
+          cameraEnabled = !cameraEnabled;
+          callMediaStream?.getVideoTracks().forEach((track) => { track.enabled = cameraEnabled; });
+          $("#toggleCameraButton").textContent = cameraEnabled ? "Turn camera off" : "Turn camera on";
+        });
+        $("#callChoiceDialog").addEventListener("click", (event) => {
+          if (event.target === event.currentTarget) event.currentTarget.hidden = true;
         });
 
         $("#chatSearch").addEventListener("input", (event) => {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "chatter-app-shell-v2";
+const CACHE_NAME = "chatter-app-shell-v3";
 const APP_SHELL = ["/app", "/manifest.webmanifest", "/chatter-icon.svg"];
 
 self.addEventListener("install", (event) => {
