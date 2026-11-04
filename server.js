@@ -938,8 +938,8 @@ async function sendUserChatUpdates(userId) {
 
 async function notifyStatusContacts(userId) {
   publish(userId, { type: "statuses" });
-  const contacts = await database.prepare("SELECT owner_id FROM contacts WHERE contact_id = ?").all(userId);
-  for (const contact of contacts) publish(contact.owner_id, { type: "statuses" });
+  const contacts = await database.prepare("SELECT contact_id FROM contacts WHERE owner_id = ?").all(userId);
+  for (const contact of contacts) publish(contact.contact_id, { type: "statuses" });
 }
 
 async function cleanupExpiredStatuses() {
@@ -1901,7 +1901,7 @@ async function handleApi(request, response, url) {
       FROM statuses s
       WHERE s.id = ? AND s.expires_at > now()
         AND (s.user_id = ? OR EXISTS (
-          SELECT 1 FROM contacts c WHERE c.owner_id = ? AND c.contact_id = s.user_id
+          SELECT 1 FROM contacts c WHERE c.owner_id = s.user_id AND c.contact_id = ?
         ))
     `).get(statusMediaRoute[1], session.userId, session.userId);
     if (!status?.attachment_path) throw new HttpError(404, "Status photo not found.");
@@ -1912,14 +1912,15 @@ async function handleApi(request, response, url) {
     await cleanupExpiredStatuses();
     const statuses = await database.prepare(`
       SELECT s.id, s.user_id, s.text, s.attachment_path, s.created_at, s.expires_at,
-        u.name, u.avatar_path, c.display_name
+        u.name, u.avatar_path, viewer_contact.display_name
       FROM statuses s
       JOIN users u ON u.id = s.user_id
-      LEFT JOIN contacts c ON c.owner_id = ? AND c.contact_id = s.user_id
+      LEFT JOIN contacts audience_contact ON audience_contact.owner_id = s.user_id AND audience_contact.contact_id = ?
+      LEFT JOIN contacts viewer_contact ON viewer_contact.owner_id = ? AND viewer_contact.contact_id = s.user_id
       WHERE s.expires_at > now()
-        AND (s.user_id = ? OR c.owner_id IS NOT NULL)
+        AND (s.user_id = ? OR audience_contact.owner_id IS NOT NULL)
       ORDER BY s.created_at DESC
-    `).all(session.userId, session.userId);
+    `).all(session.userId, session.userId, session.userId);
     return respond(response, 200, {
       statuses: statuses.map((status) => ({
         id: status.id,
