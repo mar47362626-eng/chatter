@@ -7,7 +7,7 @@
       }
     </script>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#f5f7f6" />
     <meta
       name="description"
@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20261104-app-page" />
+    <link rel="stylesheet" href="styles.css?v=20261105-mobile-keyboard" />
   </head>
   <body class="landing-mode">
     <main class="landing-screen" id="landingScreen">
@@ -368,7 +368,7 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8.5 14.2s1.2 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01" /></svg>
             </button>
           </div>
-          <input id="messageInput" type="text" placeholder="Write a message..." autocomplete="off" aria-label="Write a message" />
+          <input id="messageInput" type="text" inputmode="text" enterkeyhint="send" autocapitalize="sentences" placeholder="Write a message..." autocomplete="off" aria-label="Write a message" />
           <button class="send-button" type="submit" aria-label="Send message">
             <span>Send</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.2 18-3.6-7.2L3 10.2 21 3Z" /><path d="M10.2 13.8 15 9" /></svg>
@@ -595,6 +595,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="country-codes.js?v=20261101"></script>
-    <script src="app.js?v=20261104-profile-verification"></script>
+    <script src="app.js?v=20261105-mobile-keyboard"></script>
   </body>
 </html>

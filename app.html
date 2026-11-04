@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#245c43" />
     <meta name="description" content="A fresh, focused way to stay close with Chatter." />
     <meta name="application-name" content="Chatter" />
@@ -63,7 +63,7 @@
       .form-error { min-height: 20px; margin: 6px 0 0; color: #a43c35; font-size: 13px; line-height: 1.4; }
       .auth-note { display: flex; gap: 8px; margin-top: 23px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 
-      .workspace { display: grid; width: min(100%, 1440px); height: 100%; min-height: 0; grid-template-columns: minmax(290px, 360px) minmax(0, 1fr); margin: 0 auto; background: var(--white); }
+      .workspace { display: grid; width: min(100%, 1440px); height: var(--visual-viewport-height, 100%); min-height: 0; grid-template-columns: minmax(290px, 360px) minmax(0, 1fr); margin: 0 auto; background: var(--white); }
       .sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--line); background: #fbfaf6; }
       .sidebar-top { padding: 25px 22px 15px; }
       .brand-row { display: flex; align-items: center; justify-content: space-between; }
@@ -268,7 +268,7 @@
         .message { max-width: 88%; padding: 10px 11px 7px; }
         .message-text { font-size: 13px; }
         .composer { gap: 8px; padding: 10px 12px max(11px, env(safe-area-inset-bottom)); }
-        .composer textarea { min-height: 44px; padding: 12px; }
+        .composer textarea { min-height: 44px; padding: 12px; font-size: 16px; }
         .send-button { width: 44px; height: 44px; }
         .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, 1fr); padding: 5px 6px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
         .mobile-nav button { display: grid; align-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 12px; background: transparent; color: #78827a; font-size: 9px; font-weight: 700; cursor: pointer; }
@@ -494,6 +494,14 @@
         function finishBoot() {
           $("#bootScreen").classList.add("is-done");
         }
+
+        function updateVisualViewportHeight() {
+          const height = window.visualViewport?.height || window.innerHeight;
+          document.documentElement.style.setProperty("--visual-viewport-height", `${height}px`);
+        }
+
+        updateVisualViewportHeight();
+        window.visualViewport?.addEventListener("resize", updateVisualViewportHeight);
 
         const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (character) => ({
           "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -971,7 +979,7 @@
               ${chat.messages.length ? `<span class="day-label">Your conversation</span>${chat.messages.map(messageMarkup).join("")}` : `<div class="empty-state"><span class="empty-art" aria-hidden="true">✦</span><h2>Say hello to ${escapeHtml(chat.name.split(" ")[0])}.</h2><p>This is the start of your conversation.</p></div>`}
             </div>
             <form class="composer" id="messageForm">
-              <textarea id="messageInput" maxlength="4000" rows="1" placeholder="Write a message..." aria-label="Write a message"></textarea>
+              <textarea id="messageInput" inputmode="text" enterkeyhint="send" autocapitalize="sentences" maxlength="4000" rows="1" placeholder="Write a message..." aria-label="Write a message"></textarea>
               <button class="send-button" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-3.8-7.7L2 9.5 21 3Z" /><path d="M9.7 13.3 21 3" /></svg></button>
             </form>`;
           const scroller = $("#messageScroll");

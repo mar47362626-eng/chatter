@@ -139,6 +139,12 @@ const messages = document.querySelector("#messages");
 const messageArea = document.querySelector("#messageArea");
 const messageForm = document.querySelector("#messageForm");
 const messageInput = document.querySelector("#messageInput");
+function updateVisualViewportHeight() {
+  const height = window.visualViewport?.height || window.innerHeight;
+  document.documentElement.style.setProperty("--visual-viewport-height", `${height}px`);
+}
+updateVisualViewportHeight();
+window.visualViewport?.addEventListener("resize", updateVisualViewportHeight);
 const searchInput = document.querySelector("#searchInput");
 const emojiPopover = document.querySelector("#emojiPopover");
 const toast = document.querySelector("#toast");

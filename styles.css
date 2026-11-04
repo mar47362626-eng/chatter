@@ -581,7 +581,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 .composer-tools { display: flex; align-items: center; gap: 2px; }
 .composer-icon { width: 34px; height: 34px; flex-basis: 34px; color: #9aa69e; }
 .composer-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
-.composer > input { height: 42px; flex: 1; min-width: 0; padding: 0 12px; border: 0; outline: 0; background: transparent; color: #34443b; font-size: 11px; }
+.composer > input { height: 42px; flex: 1; min-width: 0; padding: 0 12px; border: 0; outline: 0; background: transparent; color: #34443b; font-size: 11px; touch-action: manipulation; -webkit-user-select: text; user-select: text; }
 .composer > input::placeholder { color: #a7b0aa; }
 .send-button { display: inline-flex; height: 40px; flex: 0 0 auto; align-items: center; gap: 8px; padding: 0 14px; border: 0; border-radius: 11px; background: var(--green); color: #fff; cursor: pointer; font-size: 10px; font-weight: 700; transition: background .18s ease, transform .18s ease; }
 .send-button:hover { background: var(--green-dark); }
@@ -600,7 +600,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 }
 
 @media (min-width: 761px) and (max-width: 1024px) {
-  .app-shell { height: 100vh; height: 100dvh; min-height: 0; }
+  .app-shell { height: var(--visual-viewport-height, 100dvh); min-height: 0; }
   .sidebar { flex: 0 0 min(32vw, 320px); min-width: 280px; }
   .sidebar-top { padding-right: 16px; padding-left: 18px; }
   .search-wrap { margin-right: 14px; margin-left: 14px; }
@@ -665,7 +665,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .auth-footer { flex: 0 0 auto; margin: 0; padding: 2px 0 3px; }
   .dialog-backdrop { align-items: end; padding: 12px; }
   .dialog-card { max-height: calc(100dvh - 24px); padding: 27px 22px 24px; border-radius: 18px; }
-  .app-shell { height: 100vh; height: 100dvh; min-height: 0; }
+  .app-shell { height: var(--visual-viewport-height, 100dvh); min-height: 0; }
   .sidebar { flex-basis: 100%; min-width: 0; border-right: 0; }
   .new-chat-view { min-height: 0; }
   .chat-panel { display: none; }
@@ -697,7 +697,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .composer { min-height: calc(68px + env(safe-area-inset-bottom, 0px)); flex-basis: calc(68px + env(safe-area-inset-bottom, 0px)); gap: 5px; padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)); }
   .composer-tools { gap: 0; }
   .composer-icon { width: 31px; flex-basis: 31px; }
-  .composer > input { padding: 0 5px; font-size: 12px; }
+  .composer > input { padding: 0 5px; font-size: 16px; }
   .send-button { width: 39px; height: 39px; justify-content: center; padding: 0; }
   .send-button span { display: none; }
   .send-button svg { width: 18px; height: 18px; }
@@ -865,7 +865,7 @@ html.app-mode .app-shell { width: 100%; min-height: 0; margin: 0; box-shadow: no
 .app-call-empty > span:last-child { max-width: 250px; font-size: 10px; line-height: 1.6; }
 
 @media (max-width: 1024px) {
-  html.app-mode .app-shell { height: calc(100dvh - 68px - env(safe-area-inset-bottom, 0px)); }
+  html.app-mode .app-shell { height: calc(var(--visual-viewport-height, 100dvh) - 68px - env(safe-area-inset-bottom, 0px)); }
   html.app-mode .app-bottom-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: flex; height: calc(68px + env(safe-area-inset-bottom, 0px)); align-items: stretch; justify-content: space-around; padding: 5px 8px calc(5px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #e8eee9; background: #fff; }
   html.app-mode .app-nav-button { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 2px; border: 0; border-radius: 12px; background: transparent; color: #859189; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   html.app-mode .app-nav-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
