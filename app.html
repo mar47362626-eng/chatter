@@ -132,6 +132,39 @@
       .call-copy span, .setting-copy span { margin-top: 4px; color: var(--muted); font-size: 11px; }
       .call-direction { color: var(--green); font-size: 18px; }
       .empty-note { padding: 30px 12px; color: var(--muted); font-size: 13px; text-align: center; }
+      .page-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      .page-toolbar .search-box { flex: 1; }
+      .directory-label { margin: 21px 0 7px; color: #78827a; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; }
+      .directory-contact { display: flex; width: 100%; align-items: center; gap: 12px; border: 0; border-radius: 15px; padding: 10px 8px; background: transparent; text-align: left; cursor: pointer; }
+      .directory-contact:hover { background: #f1f1e9; }
+      .directory-copy { min-width: 0; flex: 1; }
+      .directory-copy strong, .directory-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .directory-copy strong { font-size: 13px; }
+      .directory-copy span { margin-top: 4px; color: var(--muted); font-size: 11px; }
+      .settings-profile { display: flex; align-items: center; gap: 16px; margin: 18px 0 25px; padding: 17px; border: 1px solid var(--line); border-radius: 19px; background: #fffefa; }
+      .settings-profile .avatar { width: 62px; height: 62px; border-radius: 21px; font-size: 17px; }
+      .settings-profile-copy { min-width: 0; flex: 1; }
+      .settings-profile-copy strong, .settings-profile-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .settings-profile-copy strong { font-size: 14px; }
+      .settings-profile-copy span { margin-top: 5px; color: var(--muted); font-size: 11px; }
+      .settings-form { max-width: 620px; }
+      .settings-form .primary-button { margin-top: 6px; }
+      .settings-section { max-width: 620px; margin-top: 32px; border-top: 1px solid var(--line); padding-top: 24px; }
+      .settings-section h2 { margin: 0 0 7px; font-size: 17px; letter-spacing: -.5px; }
+      .settings-section > p { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+      .number-option { display: flex; flex-wrap: wrap; align-items: center; gap: 11px; margin: 9px 0; padding: 13px; border: 1px solid var(--line); border-radius: 16px; background: white; }
+      .number-copy { min-width: 120px; flex: 1; }
+      .number-copy strong, .number-copy span { display: block; }
+      .number-copy strong { font-size: 13px; }
+      .number-copy span { margin-top: 4px; color: var(--muted); font-size: 11px; }
+      .number-price { color: var(--green); font-size: 12px; font-weight: 800; white-space: nowrap; }
+      .number-price small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 500; text-align: right; }
+      .number-status-card { display: grid; gap: 7px; margin: 13px 0; border: 1px solid #dfe8d5; border-radius: 16px; padding: 14px; background: #f4f7ef; }
+      .number-status-card strong { font-size: 14px; }
+      .number-status-card span, .number-status-card small { color: var(--muted); font-size: 11px; line-height: 1.5; }
+      .inline-button { border: 0; padding: 7px 0; background: transparent; color: #9c4c3a; font-size: 12px; font-weight: 750; cursor: pointer; }
+      .inline-button:disabled { opacity: .6; cursor: wait; }
+      .directory-contact .avatar { border-radius: 50%; }
       .mobile-nav { display: none; }
       .toast { position: fixed; z-index: 20; right: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: min(420px, calc(100vw - 36px)); transform: translateY(12px); border-radius: 13px; padding: 13px 16px; background: #203b2c; box-shadow: var(--shadow); color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
       .toast.visible { transform: translateY(0); opacity: 1; }
@@ -291,12 +324,28 @@
         <button class="primary-button" type="submit">Find and chat</button>
       </form>
     </div>
+    <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script>
       (() => {
         const $ = (selector) => document.querySelector(selector);
-        const state = { user: null, chats: [], activeId: null, page: "chats", filter: "all", search: "", pendingEmail: "" };
+        const state = {
+          user: null,
+          chats: [],
+          contacts: [],
+          phoneContacts: [],
+          contactsLoaded: false,
+          contactsError: "",
+          numberStore: null,
+          numberStoreError: "",
+          activeId: null,
+          page: "chats",
+          filter: "all",
+          search: "",
+          directorySearch: "",
+          pendingEmail: ""
+        };
         let toastTimer;
         let events;
 
@@ -427,10 +476,137 @@
             .sort((a, b) => (b.message.createdAt || "").localeCompare(a.message.createdAt || ""));
         }
 
+        function renderDirectory() {
+          const panel = $("#panelContent");
+          const query = state.directorySearch.toLowerCase();
+          const contactsById = new Map(state.contacts.map((contact) => [contact.id, { ...contact }]));
+          for (const chat of state.chats) {
+            if (!chat.contactId) continue;
+            const existing = contactsById.get(chat.contactId);
+            contactsById.set(chat.contactId, {
+              ...(existing || {}),
+              id: chat.contactId,
+              name: existing?.name || chat.name,
+              phone: existing?.phone || chat.phone || "",
+              avatarUrl: chat.avatarUrl || "",
+              initials: chat.initials || initials(chat.name),
+              chatId: chat.id
+            });
+          }
+          for (const contact of state.phoneContacts) {
+            const existing = [...contactsById.values()].find((item) =>
+              item.phone && item.phone.replace(/\D/g, "") === contact.phone.replace(/\D/g, "")
+            );
+            if (!existing) contactsById.set(contact.id, contact);
+          }
+          const contacts = [...contactsById.values()]
+            .filter((contact) => `${contact.name} ${contact.phone || ""}`.toLowerCase().includes(query))
+            .sort((left, right) => left.name.localeCompare(right.name));
+          const grouped = contacts.reduce((groups, contact) => {
+            const letter = initials(contact.name)[0] || "#";
+            (groups[letter] ||= []).push(contact);
+            return groups;
+          }, {});
+          panel.className = "content-page";
+          panel.innerHTML = `
+            <div class="page-toolbar">
+              <button class="icon-button" type="button" data-action="back-to-chats" aria-label="Back to chats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6M9 12h11" /></svg></button>
+              <label class="search-box">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+                <input id="directorySearch" type="search" value="${escapeHtml(state.directorySearch)}" placeholder="Search contacts" autocomplete="off" />
+              </label>
+            </div>
+            <h1>New chat</h1>
+            <p class="page-description">Choose a Chatter contact to start a conversation.</p>
+            ${navigator.contacts?.select ? `<button class="text-button" type="button" data-action="import-phone-contacts">Import from phone contacts</button>` : ""}
+            <button class="settings-card directory-contact" type="button" data-action="add-contact">
+              <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg></span>
+              <span class="directory-copy"><strong>Add a Chatter contact</strong><span>Find someone by their Nigerian phone number</span></span>
+            </button>
+            ${!state.contactsLoaded ? `<div class="empty-note">Loading your contacts…</div>`
+              : state.contactsError ? `<div class="empty-note">${escapeHtml(state.contactsError)}<br /><button class="text-button" type="button" data-action="reload-contacts">Try again</button></div>`
+                : contacts.length ? Object.entries(grouped).map(([letter, items]) => `
+                  <h2 class="directory-label">${escapeHtml(letter)}</h2>
+                  ${items.map((contact) => `
+                    <button class="directory-contact" type="button" data-contact-id="${escapeHtml(contact.id)}">
+                      ${avatar(contact, true)}
+                      <span class="directory-copy"><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.phone || "Chatter contact")}</span></span>
+                    </button>`).join("")}`).join("")
+                  : `<div class="empty-note">${query ? "No contacts match your search." : "Your Chatter contacts will appear here."}</div>`}
+          `;
+        }
+
+        function renderNumberStore() {
+          const store = state.numberStore;
+          if (state.numberStoreError) {
+            return `<div class="empty-note">${escapeHtml(state.numberStoreError)}<br /><button class="text-button" type="button" data-action="reload-numbers">Try again</button></div>`;
+          }
+          if (!store) return `<div class="empty-note">Loading available numbers…</div>`;
+          const subscription = store.subscription;
+          const rejected = store.rejectedRequest;
+          const price = new Intl.NumberFormat("en-NG", {
+            style: "currency",
+            currency: store.currency || "NGN",
+            maximumFractionDigits: 0
+          }).format((store.price || 0) / 100);
+          let currentNumber = `<div class="number-status-card"><strong>No international number yet</strong><span>Choose an available number below to request it for your Chatter account. It is for Chatter messages only—not external calls or SMS.</span></div>`;
+          if (subscription) {
+            const pending = subscription.status === "pending_approval";
+            const date = subscription.nextPaymentAt ? new Date(subscription.nextPaymentAt).toLocaleDateString() : "being confirmed";
+            currentNumber = `<div class="number-status-card">
+              <strong>${escapeHtml(subscription.phone)} · ${escapeHtml(pending ? "Awaiting approval" : subscription.status === "active" ? "Active" : "Payment due")}</strong>
+              <span>${escapeHtml(subscription.country)} · ${escapeHtml(pending ? "Reserved for you while an administrator reviews your request." : subscription.status === "active" ? `Next renewal ${date}.` : "Payment needs attention.")}</span>
+              ${subscription.cancelAtPeriodEnd ? `<small>Renewal cancelled · held until ${escapeHtml(date)}</small>` : `<button class="inline-button" type="button" data-action="cancel-number">Cancel renewal</button>`}
+            </div>`;
+          } else if (rejected) {
+            currentNumber = `<div class="number-status-card"><strong>Previous request not approved</strong><span>${escapeHtml(rejected.phone)} · ${escapeHtml(rejected.country)}. The administrator marked the payment refund as issued.</span></div>`;
+          }
+          const numbers = store.numbers.length
+            ? store.numbers.map((number) => `<article class="number-option">
+                <span class="number-copy"><strong>${escapeHtml(number.phone)}</strong><span>${escapeHtml(number.country)}</span></span>
+                <span class="number-price">${escapeHtml(price)}<small>per month</small></span>
+                ${store.checkoutEnabled && !subscription ? `<button class="primary-button" type="button" data-buy-number="${escapeHtml(number.id)}">Request</button>` : ""}
+              </article>`).join("")
+            : `<div class="empty-note">No international numbers are available right now. Please check back later.</div>`;
+          return `${currentNumber}<h3 class="directory-label">AVAILABLE NUMBERS</h3>${numbers}
+            ${!store.checkoutEnabled && !subscription && store.numbers.length ? `<p class="form-error">Number checkout is temporarily unavailable. Please try again later.</p>` : ""}`;
+        }
+
+        function renderSettings() {
+          const panel = $("#panelContent");
+          const user = state.user;
+          panel.className = "content-page";
+          panel.innerHTML = `
+            <h1>Your space</h1>
+            <p class="page-description">Manage your profile, phone number, and Chatter account.</p>
+            <div class="settings-profile">
+              ${avatar({ ...user, initials: initials(user.name) })}
+              <span class="settings-profile-copy"><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email || "")}</span></span>
+              <button class="text-button" type="button" data-action="change-photo">Change photo</button>
+            </div>
+            <form class="settings-form" id="profileForm">
+              <div class="field"><label for="profileName">Display name</label><input id="profileName" name="name" value="${escapeHtml(user.name || "")}" autocomplete="name" minlength="2" maxlength="40" required /></div>
+              <div class="field"><label for="profileEmail">Email address</label><input id="profileEmail" name="email" type="email" value="${escapeHtml(user.email || "")}" autocomplete="email" maxlength="254" required /></div>
+              <div class="field"><label for="profilePhone">Nigerian phone number</label><input id="profilePhone" name="phone" type="tel" value="${escapeHtml(user.phone || "")}" autocomplete="tel" maxlength="24" required /></div>
+              <p class="form-error" id="profileError" role="alert"></p>
+              <button class="primary-button" type="submit">Save details</button>
+            </form>
+            <section class="settings-section">
+              <h2>International Chatter number</h2>
+              <p>Request an available international number as your Chatter contact number. Payment reserves it for your account; it becomes active after admin approval. This number does not support external calls or SMS.</p>
+              ${renderNumberStore()}
+            </section>
+            <section class="settings-section">
+              <h2>Your account</h2>
+              <p>Your chats are securely connected to your account and available when you sign in.</p>
+              <button class="primary-button" type="button" data-action="logout">Sign out</button>
+            </section>`;
+        }
+
         function renderPage() {
           renderList();
           document.querySelectorAll(".mobile-nav [data-page]").forEach((button) => {
-            const selected = button.dataset.page === state.page;
+            const selected = button.dataset.page === state.page || (state.page === "new-chat" && button.dataset.page === "chats");
             button.classList.toggle("active", selected);
             if (selected) button.setAttribute("aria-current", "page");
             else button.removeAttribute("aria-current");
@@ -441,6 +617,8 @@
           const panel = $("#panelContent");
           if (state.page === "chats") {
             renderConversation(activeChat());
+          } else if (state.page === "new-chat") {
+            renderDirectory();
           } else if (state.page === "communities") {
             panel.className = "empty-state";
             panel.innerHTML = `<span class="empty-art" aria-hidden="true">✿</span><h2>Find your people.</h2><p>Your group conversations are gathered in the list. Tap any group to open it and join the conversation.</p>`;
@@ -451,11 +629,7 @@
               ${avatar(chat, true)}<span class="call-copy"><strong>${escapeHtml(chat.name)}</strong><span>${message.call.type === "audio" ? "Voice" : "Video"} · ${escapeHtml(message.call.status || "Call")} · ${escapeHtml(message.time || "")}</span></span>
               <span class="call-direction" aria-hidden="true">${message.from === "you" ? "↗" : "↙"}</span></button>`).join("") : `<div class="empty-note">When you have calls, your recent history will appear here.</div>`}`;
           } else {
-            panel.className = "content-page";
-            panel.innerHTML = `<h1>Your space</h1><p class="page-description">Manage your account and this device.</p>
-              <div class="settings-card">${avatar({ ...state.user, initials: initials(state.user.name) }, true)}<span class="setting-copy"><strong>${escapeHtml(state.user.name)}</strong><span>${escapeHtml(state.user.email || "")}</span></span></div>
-              <div class="settings-card"><span class="setting-copy"><strong>Messages that matter</strong><span>Your Chatter conversations are shared across your signed-in devices.</span></span></div>
-              <button class="primary-button" type="button" data-action="logout" style="margin-top:10px">Sign out</button>`;
+            renderSettings();
           }
           const mobile = window.matchMedia("(max-width: 700px)").matches;
           $("#workspace").classList.toggle("mobile-chat-open", mobile && (state.page !== "chats" || Boolean(activeChat())));
@@ -474,6 +648,58 @@
           personPill();
           renderPage();
           subscribeToEvents();
+          verifyNumberReturn();
+        }
+
+        async function loadContacts() {
+          state.contactsLoaded = false;
+          state.contactsError = "";
+          renderPage();
+          try {
+            const result = await api("/api/contacts");
+            state.contacts = result.contacts || [];
+            state.contactsLoaded = true;
+          } catch (error) {
+            state.contactsError = error.message;
+            state.contactsLoaded = true;
+          }
+          if (state.page === "new-chat") renderPage();
+        }
+
+        async function loadNumberStore() {
+          state.numberStore = null;
+          state.numberStoreError = "";
+          renderPage();
+          try {
+            state.numberStore = await api("/api/numbers");
+          } catch (error) {
+            state.numberStoreError = error.message;
+          }
+          if (state.page === "settings") renderPage();
+        }
+
+        async function verifyNumberReturn() {
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.get("payment") !== "number-subscription") return;
+          const reference = currentUrl.searchParams.get("reference") || "";
+          currentUrl.searchParams.delete("payment");
+          currentUrl.searchParams.delete("reference");
+          window.history.replaceState({}, "", currentUrl);
+          try {
+            const result = await api("/api/numbers/verify", {
+              method: "POST",
+              body: JSON.stringify({ reference })
+            });
+            if (result.verified) {
+              toast(result.approved
+                ? "Payment verified. Your Chatter number is active."
+                : "Payment received. Your number is reserved while it awaits admin approval.");
+              state.page = "settings";
+              await loadNumberStore();
+            }
+          } catch (error) {
+            toast(`Number payment was not verified: ${error.message}`);
+          }
         }
 
         function subscribeToEvents() {
@@ -514,6 +740,7 @@
             if (state.page === "communities") state.filter = "groups";
             else if (state.page === "chats" && state.filter === "groups") state.filter = "all";
             renderPage();
+            if (state.page === "settings" && !state.numberStore && !state.numberStoreError) loadNumberStore();
             return;
           }
 
@@ -536,7 +763,52 @@
           if (action === "back") {
             state.activeId = null;
             renderPage();
+          } else if (action === "back-to-chats") {
+            state.page = "chats";
+            state.filter = "all";
+            renderPage();
+          } else if (action === "add-contact") {
+            $("#contactError").textContent = "";
+            $("#newChatModal").hidden = false;
+            $("#contactName").focus();
+          } else if (action === "import-phone-contacts") {
+            try {
+              const picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
+              state.phoneContacts = picked.flatMap((item) => {
+                const name = Array.isArray(item.name) ? item.name[0] : "";
+                const phone = Array.isArray(item.tel) ? item.tel[0] : "";
+                if (!name || !phone) return [];
+                const digits = phone.replace(/\D/g, "");
+                if (!digits) return [];
+                return [{ id: `device-${digits}`, name, phone, initials: initials(name), avatarUrl: "" }];
+              });
+              renderPage();
+              if (!state.phoneContacts.length) toast("No contacts with phone numbers were selected.");
+            } catch (error) {
+              if (error.name !== "AbortError") toast(`Could not read phone contacts: ${error.message}`);
+            }
+          } else if (action === "change-photo") {
+            $("#profilePhotoInput").click();
+          } else if (action === "reload-contacts") {
+            loadContacts();
+          } else if (action === "reload-numbers") {
+            loadNumberStore();
+          } else if (action === "cancel-number") {
+            if (!confirm("Stop future monthly charges? Your number will remain held until the paid period ends.")) return;
+            const button = event.target.closest("button");
+            button.disabled = true;
+            button.textContent = "Cancelling…";
+            try {
+              await api("/api/numbers/cancel", { method: "POST" });
+              toast("Monthly renewal has been cancelled.");
+              await loadNumberStore();
+            } catch (error) {
+              toast(error.message);
+              button.disabled = false;
+              button.textContent = "Cancel renewal";
+            }
           } else if (action === "logout") {
+            if (!confirm("Sign out of Chatter on this device?")) return;
             try {
               await api("/api/logout", { method: "POST" });
               showAuth();
@@ -556,11 +828,77 @@
               textNode?.closest(".message").scrollIntoView({ behavior: "smooth", block: "center" });
             }
           }
+
+          const contactButton = event.target.closest("[data-contact-id]");
+          if (contactButton) {
+            const contact = state.contacts.find((item) => item.id === contactButton.dataset.contactId) ||
+              state.phoneContacts.find((item) => item.id === contactButton.dataset.contactId);
+            const contactPhone = contact?.phone?.replace(/\D/g, "");
+            const chat = state.chats.find((item) => item.contactId === contactButton.dataset.contactId ||
+              (contactPhone && item.phone?.replace(/\D/g, "") === contactPhone));
+            if (chat) {
+              state.activeId = chat.id;
+              state.page = "chats";
+              renderPage();
+              return;
+            }
+            if (!contact?.phone) {
+              toast("This contact has no Chatter phone number saved.");
+              return;
+            }
+            contactButton.disabled = true;
+            try {
+              const result = await api("/api/contacts", {
+                method: "POST",
+                body: JSON.stringify({ name: contact.name, phone: contact.phone })
+              });
+              state.chats = [result.chat, ...state.chats.filter((item) => item.id !== result.chat.id)];
+              state.activeId = result.chat.id;
+              state.page = "chats";
+              renderPage();
+            } catch (error) {
+              toast(error.message);
+              contactButton.disabled = false;
+            }
+            return;
+          }
+
+          const buyButton = event.target.closest("[data-buy-number]");
+          if (buyButton) {
+            buyButton.disabled = true;
+            buyButton.textContent = "Opening checkout…";
+            try {
+              const result = await api("/api/numbers/subscribe", {
+                method: "POST",
+                body: JSON.stringify({ numberId: buyButton.dataset.buyNumber, returnToApp: true })
+              });
+              window.location.assign(result.authorizationUrl);
+            } catch (error) {
+              toast(error.message);
+              await loadNumberStore();
+            }
+          }
         });
 
         $("#chatSearch").addEventListener("input", (event) => {
           state.search = event.target.value.trim();
           renderList();
+        });
+        $("#newChatButton").addEventListener("click", () => {
+          state.page = "new-chat";
+          state.filter = "all";
+          state.directorySearch = "";
+          renderPage();
+          loadContacts();
+        });
+        document.addEventListener("input", (event) => {
+          if (event.target.id !== "directorySearch") return;
+          state.directorySearch = event.target.value.trim();
+          const position = event.target.selectionStart;
+          renderDirectory();
+          const input = $("#directorySearch");
+          input.focus();
+          input.setSelectionRange(position, position);
         });
 
         $("#loginForm").addEventListener("submit", async (event) => {
@@ -649,11 +987,6 @@
           }
         });
 
-        $("#newChatButton").addEventListener("click", () => {
-          $("#contactError").textContent = "";
-          $("#newChatModal").hidden = false;
-          $("#contactName").focus();
-        });
         $("#closeNewChat").addEventListener("click", () => { $("#newChatModal").hidden = true; });
         $("#newChatModal").addEventListener("click", (event) => {
           if (event.target.id === "newChatModal") event.currentTarget.hidden = true;
@@ -669,6 +1002,7 @@
               body: JSON.stringify({ name: $("#contactName").value.trim(), phone: $("#contactPhone").value.trim() })
             });
             state.chats = [result.chat, ...state.chats.filter((chat) => chat.id !== result.chat.id)];
+            state.contactsLoaded = false;
             state.activeId = result.chat.id;
             state.page = "chats";
             $("#newChatModal").hidden = true;
@@ -678,6 +1012,69 @@
             $("#contactError").textContent = error.message;
           } finally {
             button.disabled = false;
+          }
+        });
+
+        document.addEventListener("submit", async (event) => {
+          if (event.target.id !== "profileForm") return;
+          event.preventDefault();
+          const button = event.target.querySelector('button[type="submit"]');
+          button.disabled = true;
+          $("#profileError").textContent = "";
+          try {
+            const result = await api("/api/profile", {
+              method: "PATCH",
+              body: JSON.stringify({
+                name: $("#profileName").value.trim(),
+                email: $("#profileEmail").value.trim(),
+                phone: $("#profilePhone").value.trim()
+              })
+            });
+            state.user = result.user;
+            personPill();
+            toast("Your account details have been saved.");
+            renderPage();
+          } catch (error) {
+            $("#profileError").textContent = error.message;
+          } finally {
+            button.disabled = false;
+          }
+        });
+
+        $("#profilePhotoInput").addEventListener("change", async (event) => {
+          const file = event.target.files[0];
+          event.target.value = "";
+          if (!file) return;
+          if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            toast("Choose a JPEG, PNG, or WebP photo.");
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            toast("Photos must be 5 MB or smaller.");
+            return;
+          }
+          try {
+            const reader = new FileReader();
+            const imageData = await new Promise((resolve, reject) => {
+              reader.addEventListener("load", () => {
+                const value = typeof reader.result === "string" ? reader.result : "";
+                const data = value.slice(value.indexOf(",") + 1);
+                if (!data) reject(new Error("Could not read the selected photo."));
+                else resolve({ name: file.name, type: file.type, data });
+              });
+              reader.addEventListener("error", () => reject(new Error("Could not read the selected photo.")));
+              reader.readAsDataURL(file);
+            });
+            const result = await api("/api/profile/avatar", {
+              method: "PATCH",
+              body: JSON.stringify(imageData)
+            });
+            state.user = result.user;
+            personPill();
+            renderPage();
+            toast("Your profile photo has been updated.");
+          } catch (error) {
+            toast(error.message);
           }
         });
 

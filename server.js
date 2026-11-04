@@ -386,7 +386,7 @@ function getPublicUrl() {
   return url.toString();
 }
 
-function getPaystackCallbackUrl(request, reference) {
+function getPaystackCallbackUrl(request, reference, returnToApp = false) {
   const configuredUrl = getPublicUrl();
   let baseUrl = configuredUrl;
   if (!baseUrl) {
@@ -396,7 +396,7 @@ function getPaystackCallbackUrl(request, reference) {
     }
     baseUrl = `http://${host}`;
   }
-  const callbackUrl = new URL("/", baseUrl);
+  const callbackUrl = new URL(returnToApp ? "/app" : "/", baseUrl);
   callbackUrl.searchParams.set("payment", "number-subscription");
   callbackUrl.searchParams.set("reference", reference);
   return callbackUrl.toString();
@@ -1655,7 +1655,7 @@ async function handleApi(request, response, url) {
           email: user.email,
           plan: planCode,
           reference,
-          callback_url: getPaystackCallbackUrl(request, reference),
+          callback_url: getPaystackCallbackUrl(request, reference, input.returnToApp === true),
           metadata: { purpose: "chatter_number_subscription", number_subscription_id: subscriptionId }
         })
       });
