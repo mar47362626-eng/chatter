@@ -1,0 +1,22 @@
+{
+  "id": "/app",
+  "name": "Chatter — stay close",
+  "short_name": "Chatter",
+  "description": "Private conversations, groups, and calls with your people.",
+  "lang": "en",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f4ed",
+  "theme_color": "#245c43",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "/chatter-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

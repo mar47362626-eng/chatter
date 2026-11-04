@@ -3,10 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f5f4ed" />
+    <meta name="theme-color" content="#245c43" />
     <meta name="description" content="A fresh, focused way to stay close with Chatter." />
+    <meta name="application-name" content="Chatter" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Chatter — your space</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2" />
+    <link rel="apple-touch-icon" href="/chatter-icon.svg" />
     <style>
       :root {
         color-scheme: light;
@@ -180,6 +185,17 @@
       .modal-heading h2 { margin: 0; font-size: 21px; letter-spacing: -.7px; }
       .modal .field { margin-top: 18px; }
       .modal .primary-button { width: 100%; margin-top: 8px; }
+      .install-button { margin-top: 12px; }
+      .boot-screen { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 18% 12%, #dfe9c8 0, transparent 38%), radial-gradient(ellipse at 88% 90%, #d9e8d8 0, transparent 38%), var(--paper); transition: opacity .32s ease, visibility .32s ease; }
+      .boot-screen.is-done { visibility: hidden; opacity: 0; pointer-events: none; }
+      .boot-card { display: grid; justify-items: center; gap: 12px; padding: 28px; text-align: center; }
+      .boot-logo { display: grid; width: 76px; height: 76px; place-items: center; border-radius: 27px 27px 27px 9px; background: var(--green); box-shadow: 0 15px 40px #193d2d30; color: var(--lime); font-size: 39px; font-weight: 900; animation: boot-float 1.8s ease-in-out infinite; }
+      .boot-card strong { font-size: 21px; letter-spacing: -.7px; }
+      .boot-card span { color: var(--muted); font-size: 12px; }
+      .boot-spinner { width: 24px; height: 24px; margin-top: 8px; border: 2px solid #dfe6d9; border-top-color: var(--green); border-radius: 50%; animation: boot-spin .75s linear infinite; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-float { 50% { transform: translateY(-5px); } }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
       @media (max-width: 700px) {
         html, body { background: var(--white); }
@@ -242,6 +258,14 @@
     </style>
   </head>
   <body>
+    <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+      <div class="boot-card">
+        <span class="boot-logo" aria-hidden="true">c</span>
+        <strong>Chatter</strong>
+        <span>Getting your space ready…</span>
+        <span class="boot-spinner" aria-hidden="true"></span>
+      </div>
+    </div>
     <section class="auth-screen" id="authScreen" aria-label="Chatter account">
       <div class="auth-card">
         <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
@@ -366,6 +390,11 @@
         };
         let toastTimer;
         let events;
+        let pendingInstallPrompt = null;
+
+        function finishBoot() {
+          $("#bootScreen").classList.add("is-done");
+        }
 
         const escapeHtml = (value = "") => String(value).replace(/[&<>"']/g, (character) => ({
           "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -621,6 +650,7 @@
             <section class="settings-section">
               <h2>Your account</h2>
               <p>Your chats are securely connected to your account and available when you sign in.</p>
+              <button class="primary-button install-button" id="installAppButton" type="button" ${pendingInstallPrompt ? "" : "hidden"}>Install Chatter</button>
               <button class="primary-button" type="button" data-action="logout">Sign out</button>
             </section>`;
         }
@@ -667,6 +697,7 @@
           $("#authScreen").hidden = true;
           $("#workspace").hidden = false;
           $("#mobileNav").hidden = false;
+          finishBoot();
           personPill();
           renderPage();
           subscribeToEvents();
@@ -745,6 +776,7 @@
 
         function showAuth(errorMessage) {
           events?.close();
+          finishBoot();
           $("#workspace").hidden = true;
           $("#mobileNav").hidden = true;
           $("#authScreen").hidden = false;
@@ -782,6 +814,22 @@
           }
 
           const action = event.target.closest("[data-action]")?.dataset.action;
+          if (event.target.closest("#installAppButton")) {
+            if (!pendingInstallPrompt) {
+              toast("Use your browser menu to install or add Chatter to your home screen.");
+              return;
+            }
+            const installPrompt = pendingInstallPrompt;
+            try {
+              await installPrompt.prompt();
+              await installPrompt.userChoice;
+              pendingInstallPrompt = null;
+              $("#installAppButton").hidden = true;
+            } catch (error) {
+              toast(`Could not open the install prompt: ${error.message}`);
+            }
+            return;
+          }
           if (action === "back") {
             state.activeId = null;
             renderPage();
@@ -1165,9 +1213,31 @@
           if (!$("#workspace").hidden) renderPage();
         });
 
+        window.addEventListener("beforeinstallprompt", (event) => {
+          event.preventDefault();
+          pendingInstallPrompt = event;
+          const button = $("#installAppButton");
+          if (button) button.hidden = false;
+        });
+        window.addEventListener("appinstalled", () => {
+          pendingInstallPrompt = null;
+          const button = $("#installAppButton");
+          if (button) button.hidden = true;
+          toast("Chatter has been installed.");
+        });
+
+        if ("serviceWorker" in navigator && /^https?:$/.test(window.location.protocol)) {
+          navigator.serviceWorker.register("/sw.js").catch((error) => {
+            console.error("Could not register the Chatter offline app shell.", error);
+          });
+        }
+
         api("/api/session").then((result) => {
           if (result.user) openWorkspace(result);
-          else setAuthMode("login");
+          else {
+            setAuthMode("login");
+            finishBoot();
+          }
         }).catch((error) => {
           console.error("Could not restore the Chatter session.", error);
           showAuth(`Could not connect to Chatter: ${error.message}`);

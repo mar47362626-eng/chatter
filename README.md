@@ -2,7 +2,9 @@
 
 Chatter is a chat application served by Node.js. Its public home page introduces the app and links into account registration and login. It uses Supabase PostgreSQL for accounts, contacts, conversations, groups, messages, and activity, and server-sent events to deliver chat updates to connected browsers.
 
-Open `/app` (or `/app.html`) for the standalone mobile and tablet app. It shares the same accounts and conversations as the main site, with its own contact picker (including device contacts on supported browsers), group creation, profile-photo and account-detail editing, and international Chatter number requests in Settings.
+Open `/app` (or `/app.html`) for the standalone mobile and tablet app. It shares the same accounts and conversations as the main site, with its own contact picker (including device contacts on supported browsers), group creation, profile-photo and account-detail editing, and international Chatter number requests in Settings. On supported browsers, install it from the browser's **Install app** or **Add to Home Screen** option; it has its own icon, startup screen, and cached app shell.
+
+The `android/` folder contains an Android Studio WebView app project for the live Chatter app, including a branded native loading screen and camera/microphone permission handling. Build an APK from Android Studio by opening that folder and selecting **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Java and the Android SDK are build prerequisites and are not included in the project.
 
 ## Requirements
 
