@@ -599,6 +599,23 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .message-area { padding-right: clamp(70px, 10vw, 150px); padding-left: clamp(70px, 10vw, 150px); }
 }
 
+@media (min-width: 761px) and (max-width: 1024px) {
+  .app-shell { height: 100vh; height: 100dvh; min-height: 0; }
+  .sidebar { flex: 0 0 min(32vw, 320px); min-width: 280px; }
+  .sidebar-top { padding-right: 16px; padding-left: 18px; }
+  .search-wrap { margin-right: 14px; margin-left: 14px; }
+  .filter-row { gap: 6px; padding: 16px 14px 14px; }
+  .filter-chip { gap: 5px; padding: 7px 9px; font-size: 10px; }
+  .section-label { padding-right: 17px; padding-left: 17px; }
+  .sidebar-bottom { gap: 9px; padding-right: 14px; padding-left: 14px; }
+  .chat-header { gap: 9px; padding-right: 18px; padding-left: 18px; }
+  .header-person { gap: 9px; }
+  .header-actions { gap: 4px; }
+  .header-action { gap: 5px; padding-right: 8px; padding-left: 8px; }
+  .message-area { padding-right: clamp(18px, 4vw, 48px); padding-left: clamp(18px, 4vw, 48px); }
+  .composer { gap: 6px; padding-right: 16px; padding-left: 16px; }
+}
+
 @media (max-width: 760px) {
   body { background: #fff; }
   body.landing-mode { background: #f8faf8; }
@@ -648,7 +665,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .auth-footer { flex: 0 0 auto; margin: 0; padding: 2px 0 3px; }
   .dialog-backdrop { align-items: end; padding: 12px; }
   .dialog-card { max-height: calc(100dvh - 24px); padding: 27px 22px 24px; border-radius: 18px; }
-  .app-shell { height: 100dvh; min-height: 0; }
+  .app-shell { height: 100vh; height: 100dvh; min-height: 0; }
   .sidebar { flex-basis: 100%; min-width: 0; border-right: 0; }
   .new-chat-view { min-height: 0; }
   .chat-panel { display: none; }
@@ -677,7 +694,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .chat-intro { margin-bottom: 19px; }
   .message-stack { max-width: 82%; }
   .message-report-button { opacity: 1; }
-  .composer { min-height: 68px; flex-basis: 68px; gap: 5px; padding: 9px 12px; }
+  .composer { min-height: calc(68px + env(safe-area-inset-bottom, 0px)); flex-basis: calc(68px + env(safe-area-inset-bottom, 0px)); gap: 5px; padding: 9px 12px calc(9px + env(safe-area-inset-bottom, 0px)); }
   .composer-tools { gap: 0; }
   .composer-icon { width: 31px; flex-basis: 31px; }
   .composer > input { padding: 0 5px; font-size: 12px; }
@@ -689,6 +706,13 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
   .call-preview-stage { min-height: 48vh; }
   .call-controls { flex-wrap: wrap; gap: 7px; }
   .call-control-button { min-height: 38px; padding: 0 11px; font-size: 9px; }
+  .conversation-list, .new-chat-scroll, .message-area { -webkit-overflow-scrolling: touch; }
+}
+
+@media (min-width: 761px) and (max-width: 900px) {
+  .header-action span { display: none; }
+  .header-action { width: 36px; justify-content: center; padding: 0; border: 0; }
+  .header-actions > .icon-button { width: 36px; flex-basis: 36px; }
 }
 
 @media (max-width: 420px) {
