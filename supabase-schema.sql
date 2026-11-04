@@ -24,6 +24,17 @@ create table if not exists public.pending_registrations (
   last_sent_at bigint not null
 );
 
+create table if not exists public.pending_profile_updates (
+  user_id text primary key references public.users(id) on delete cascade,
+  email text not null unique,
+  name text not null,
+  phone text not null,
+  verification_hash text not null,
+  attempts integer not null default 0,
+  expires_at bigint not null,
+  last_sent_at bigint not null
+);
+
 create table if not exists public.chats (
   id text primary key,
   type text not null check (type in ('direct', 'group', 'community', 'self')),
@@ -181,6 +192,7 @@ create index if not exists message_reports_status_created on public.message_repo
 
 alter table public.users enable row level security;
 alter table public.pending_registrations enable row level security;
+alter table public.pending_profile_updates enable row level security;
 alter table public.chats enable row level security;
 alter table public.chat_members enable row level security;
 alter table public.messages enable row level security;

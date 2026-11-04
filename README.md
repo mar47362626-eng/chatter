@@ -32,6 +32,8 @@ Run the updated `supabase-schema.sql` in the Supabase SQL Editor to add the prof
 
 New accounts must verify their email before they are created. Chatter sends a six-digit verification code through Brevo, expires codes after 10 minutes, limits each code to five attempts, and waits 60 seconds before sending another code to the same address. After successful verification, Chatter creates the account and sends a branded welcome email. A welcome-email delivery problem does not prevent sign-in after the account has been created.
 
+Changing the name, email address, or phone number in Settings also requires a six-digit code sent to the email address entered in the form. The changes are saved only after the code is verified. For an existing Supabase project, run the updated `supabase-schema.sql` in the Supabase SQL Editor to create the pending profile-update table.
+
 In Brevo, create a v3 API key and verify the sender email address (or authenticate its domain). Configure these server environment variables before starting Chatter:
 
 ```powershell
@@ -42,7 +44,7 @@ $env:CHATTER_PUBLIC_URL = "https://your-service.onrender.com"
 npm.cmd start
 ```
 
-`BREVO_SENDER_NAME` and `CHATTER_PUBLIC_URL` are optional; the sender name defaults to `Chatter`, and the welcome email includes an app button only when a public URL is configured. Keep the API key in server environment settings, never in browser code or GitHub. Registration is unavailable until `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` are configured.
+`BREVO_SENDER_NAME` and `CHATTER_PUBLIC_URL` are optional; the sender name defaults to `Chatter`, and the welcome email includes an app button only when a public URL is configured. Keep the API key in server environment settings, never in browser code or GitHub. Registration and account-detail verification require `BREVO_API_KEY` and `BREVO_SENDER_EMAIL`.
 
 ## Audio and video calls
 

@@ -450,6 +450,15 @@
           <p class="auth-field-error" id="settingsError" role="alert"></p>
           <button class="auth-submit" type="submit">Save changes <span aria-hidden="true">→</span></button>
         </form>
+        <form id="settingsVerificationForm" hidden>
+          <p class="dialog-description">Enter the code sent to <strong id="settingsVerificationEmail"></strong> to confirm and save your changes.</p>
+          <label class="auth-label" for="settingsVerificationCode">Six-digit email code</label>
+          <input class="auth-input" id="settingsVerificationCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required />
+          <p class="auth-field-error" id="settingsVerificationError" role="alert"></p>
+          <button class="auth-submit" type="submit">Verify and save <span aria-hidden="true">→</span></button>
+          <button class="profile-photo-button" type="button" id="resendSettingsVerificationCode">Send a new code</button>
+          <button class="profile-photo-button" type="button" id="backToSettingsDetails">Back to details</button>
+        </form>
         <div class="share-link-panel">
           <label class="auth-label" for="chatShareLink">Your chat link</label>
           <div class="share-link-row">
@@ -586,6 +595,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="country-codes.js?v=20261101"></script>
-    <script src="app.js?v=20261104-app-page"></script>
+    <script src="app.js?v=20261104-profile-verification"></script>
   </body>
 </html>

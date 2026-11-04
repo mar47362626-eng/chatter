@@ -1359,6 +1359,9 @@ moreButton.addEventListener("click", () => {
 
 document.querySelector("#settingsButton").addEventListener("click", () => {
   closeOptionsMenu();
+  document.querySelector("#settingsVerificationForm").hidden = true;
+  document.querySelector("#settingsForm").hidden = false;
+  document.querySelector("#settingsVerificationError").textContent = "";
   document.querySelector("#settingsName").value = profile?.name || "";
   document.querySelector("#settingsEmail").value = profile?.email || "";
   document.querySelector("#settingsPhone").value = profile?.phone || "";
@@ -1864,19 +1867,85 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
     return;
   }
   const nextProfile = { name, email, phone: phoneInput };
+  const submitButton = event.currentTarget.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
   try {
-    const result = await apiRequest("/api/profile", {
-      method: "PATCH",
+    const result = await apiRequest("/api/profile/send-code", {
+      method: "POST",
       body: JSON.stringify(nextProfile)
     });
-    profile = result.user;
+    if (result.unchanged) {
+      showToast("Your account details are already up to date.");
+      return;
+    }
+    document.querySelector("#settingsVerificationEmail").textContent = result.email;
+    document.querySelector("#settingsVerificationCode").value = "";
+    document.querySelector("#settingsVerificationError").textContent = "";
+    document.querySelector("#settingsForm").hidden = true;
+    document.querySelector("#settingsVerificationForm").hidden = false;
+    document.querySelector("#settingsVerificationCode").focus();
   } catch (requestError) {
     error.textContent = requestError.message;
-    return;
+  } finally {
+    submitButton.disabled = false;
   }
-  applyProfile();
-  document.querySelector("#settingsDialog").hidden = true;
-  showToast("Your account details have been updated.");
+});
+
+document.querySelector("#settingsVerificationForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  const error = document.querySelector("#settingsVerificationError");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    const result = await apiRequest("/api/profile/verify-code", {
+      method: "POST",
+      body: JSON.stringify({ code: document.querySelector("#settingsVerificationCode").value.trim() })
+    });
+    profile = result.user;
+    applyProfile();
+    document.querySelector("#settingsDialog").hidden = true;
+    showToast("Your account details have been verified and saved.");
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#settingsVerificationCode").addEventListener("input", (event) => {
+  event.target.value = event.target.value.replace(/\D/g, "").slice(0, 6);
+});
+
+document.querySelector("#resendSettingsVerificationCode").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const error = document.querySelector("#settingsVerificationError");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    const result = await apiRequest("/api/profile/send-code", {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.querySelector("#settingsName").value.trim(),
+        email: document.querySelector("#settingsEmail").value.trim(),
+        phone: document.querySelector("#settingsPhone").value.trim()
+      })
+    });
+    document.querySelector("#settingsVerificationEmail").textContent = result.email || document.querySelector("#settingsEmail").value.trim();
+    document.querySelector("#settingsVerificationCode").value = "";
+    showToast("A new verification code was sent.");
+  } catch (requestError) {
+    error.textContent = requestError.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.querySelector("#backToSettingsDetails").addEventListener("click", () => {
+  document.querySelector("#settingsVerificationForm").hidden = true;
+  document.querySelector("#settingsForm").hidden = false;
+  document.querySelector("#settingsVerificationError").textContent = "";
+  document.querySelector("#settingsName").focus();
 });
 
 async function requestRegistrationCode(payload) {

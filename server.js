@@ -372,6 +372,42 @@ function verificationEmail(name, code) {
   };
 }
 
+function profileVerificationCodeHash(userId, email, code) {
+  return createHmac("sha256", process.env.BREVO_API_KEY)
+    .update(`chatter-profile-verification:${userId}:${email}:${code}`)
+    .digest("hex");
+}
+
+function profileVerificationEmail(name, code) {
+  const safeName = escapeEmailHtml(name);
+  const html = `
+    <!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="margin:0;padding:32px 12px;background:#f4f7f5;font-family:Arial,Helvetica,sans-serif;color:#203128">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;border-collapse:collapse">
+          <tr><td style="padding:0 0 18px;text-align:center;font-size:23px;font-weight:700;letter-spacing:-1px;color:#203128">chatter<span style="color:#1c9a70">.</span></td></tr>
+          <tr><td style="padding:34px 32px 30px;border-radius:18px;background:#fff;border:1px solid #e5ece7">
+            <p style="margin:0 0 10px;color:#1c9a70;font-size:11px;font-weight:700;letter-spacing:1.5px">ACCOUNT DETAILS</p>
+            <h1 style="margin:0 0 12px;font-size:25px;line-height:1.25;color:#203128">Confirm your changes</h1>
+            <p style="margin:0;color:#6d7d73;font-size:15px;line-height:1.7">Hi ${safeName}, enter this code in Chatter to save your account details.</p>
+            <div style="margin:26px 0;padding:19px 12px;border:1px solid #dcece3;border-radius:12px;background:#f4faf6;text-align:center">
+              <span style="color:#177d5c;font-size:32px;font-weight:700;letter-spacing:10px">${code}</span>
+            </div>
+            <p style="margin:0;color:#6d7d73;font-size:13px;line-height:1.7">This code expires in <strong>10 minutes</strong>. If you did not request this change, you can safely ignore this email.</p>
+          </td></tr>
+          <tr><td style="padding:18px 12px 0;color:#94a198;text-align:center;font-size:11px;line-height:1.6">A little closer, wherever you are.<br>© Chatter</td></tr>
+        </table>
+      </body>
+    </html>
+  `;
+  return {
+    subject: "Confirm your Chatter account changes",
+    html,
+    text: `Hi ${name},\n\nUse this code to save your Chatter account details: ${code}\n\nIt expires in 10 minutes. If you did not request this change, ignore this email.\n\nA little closer, wherever you are.\nChatter`
+  };
+}
+
 function getPublicUrl() {
   const configuredUrl = process.env.CHATTER_PUBLIC_URL;
   if (!configuredUrl) return "";
@@ -1552,6 +1588,104 @@ async function handleApi(request, response, url) {
   }
 
   const session = await requireSession(request, response);
+  if (route === "POST /api/profile/send-code") {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
+      throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
+    }
+    const input = await readJson(request);
+    const name = cleanText(input.name, "Name", 40);
+    const email = cleanText(input.email, "Email", 254).toLowerCase();
+    const phone = requireNigerianPhone(normalizePhone(input.phone));
+    if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
+    const currentUser = await database.prepare("SELECT name, email, phone FROM users WHERE id = ?").get(session.userId);
+    if (!currentUser) throw new HttpError(401, "Please log in to continue.");
+    if (currentUser.name === name && currentUser.email.toLowerCase() === email && currentUser.phone === phone) {
+      await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+      return respond(response, 200, { unchanged: true, user: publicUser(await getPublicUser(session.userId)) });
+    }
+    if (await database.prepare("SELECT 1 FROM users WHERE lower(email) = ? AND id != ?").get(email, session.userId)) {
+      throw new HttpError(409, "That email is already in use.");
+    }
+    if (await database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(phone, session.userId)) {
+      throw new HttpError(409, "That phone number is already in use.");
+    }
+    if (await database.prepare("SELECT 1 FROM pending_profile_updates WHERE email = ? AND user_id != ?").get(email, session.userId)) {
+      throw new HttpError(409, "That email is being verified for another account.");
+    }
+    const now = Date.now();
+    const pending = await database.prepare("SELECT last_sent_at FROM pending_profile_updates WHERE user_id = ?").get(session.userId);
+    if (pending && now - pending.last_sent_at < verificationResendDelay) {
+      const seconds = Math.ceil((verificationResendDelay - (now - pending.last_sent_at)) / 1000);
+      throw new HttpError(429, `Please wait ${seconds} seconds before requesting another code.`);
+    }
+    const code = String(randomInt(0, 1000000)).padStart(6, "0");
+    const codeHash = profileVerificationCodeHash(session.userId, email, code);
+    await database.prepare(`
+      INSERT INTO pending_profile_updates (user_id, email, name, phone, verification_hash, attempts, expires_at, last_sent_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        email = excluded.email, name = excluded.name, phone = excluded.phone,
+        verification_hash = excluded.verification_hash, attempts = 0,
+        expires_at = excluded.expires_at, last_sent_at = excluded.last_sent_at
+    `).run(session.userId, email, name, phone, codeHash, now + verificationCodeLifetime, now);
+    try {
+      await sendBrevoEmail({ email, name, ...profileVerificationEmail(name, code) });
+    } catch (error) {
+      await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ? AND verification_hash = ?")
+        .run(session.userId, codeHash);
+      throw error;
+    }
+    return respond(response, 200, { sent: true, email });
+  }
+
+  if (route === "POST /api/profile/verify-code") {
+    if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
+      throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
+    }
+    const input = await readJson(request);
+    const pending = await database.prepare("SELECT * FROM pending_profile_updates WHERE user_id = ?").get(session.userId);
+    if (!pending) throw new HttpError(400, "No active account-change verification was found. Save your details to request a new code.");
+    const now = Date.now();
+    if (pending.expires_at <= now) {
+      await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+      throw new HttpError(400, "That code has expired. Save your details to request a new one.");
+    }
+    const code = typeof input.code === "string" ? input.code.trim() : "";
+    const isCodeFormatValid = /^\d{6}$/.test(code);
+    const submittedHash = Buffer.from(
+      profileVerificationCodeHash(session.userId, pending.email, isCodeFormatValid ? code : "invalid"),
+      "hex"
+    );
+    const expectedHash = Buffer.from(pending.verification_hash, "hex");
+    const isCodeCorrect = isCodeFormatValid && timingSafeEqual(submittedHash, expectedHash);
+    if (!isCodeCorrect) {
+      const attempts = pending.attempts + 1;
+      if (attempts >= maxVerificationAttempts) {
+        await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+        throw new HttpError(429, "Too many incorrect codes. Save your details to request a new one.");
+      }
+      await database.prepare("UPDATE pending_profile_updates SET attempts = ? WHERE user_id = ?").run(attempts, session.userId);
+      throw new HttpError(400, `That code is not correct. ${maxVerificationAttempts - attempts} attempts remaining.`);
+    }
+    if (await database.prepare("SELECT 1 FROM users WHERE lower(email) = ? AND id != ?").get(pending.email, session.userId)) {
+      await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+      throw new HttpError(409, "That email is no longer available. Update your details and request a new code.");
+    }
+    if (await database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(pending.phone, session.userId)) {
+      await database.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+      throw new HttpError(409, "That phone number is no longer available. Update your details and request a new code.");
+    }
+    await database.transaction(async (transaction) => {
+      await transaction.prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?")
+        .run(pending.name, pending.email, pending.phone, session.userId);
+      await recordUserActivity(session.userId, "profile.updated", {}, transaction);
+      await transaction.prepare("DELETE FROM pending_profile_updates WHERE user_id = ?").run(session.userId);
+    });
+    await sendUserChatUpdates(session.userId);
+    return respond(response, 200, { user: publicUser(await getPublicUser(session.userId)) });
+  }
+
   if (route === "GET /api/numbers") {
     await database.prepare(`
       UPDATE foreign_numbers
@@ -2108,18 +2242,7 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "PATCH /api/profile") {
-    const input = await readJson(request);
-    const name = cleanText(input.name, "Name", 40);
-    const email = cleanText(input.email, "Email", 254).toLowerCase();
-    const phone = requireNigerianPhone(normalizePhone(input.phone));
-    if (name.length < 2) throw new HttpError(400, "Name must be at least 2 characters.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Enter a valid email address.");
-    if (await database.prepare("SELECT 1 FROM users WHERE email = ? AND id != ?").get(email, session.userId)) throw new HttpError(409, "That email is already in use.");
-    if (await database.prepare("SELECT 1 FROM users WHERE phone = ? AND id != ?").get(phone, session.userId)) throw new HttpError(409, "That phone number is already in use.");
-    await database.prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?").run(name, email, phone, session.userId);
-    await recordUserActivity(session.userId, "profile.updated");
-    await sendUserChatUpdates(session.userId);
-    return respond(response, 200, { user: publicUser(await getPublicUser(session.userId)) });
+    throw new HttpError(400, "Save your details to request an email verification code.");
   }
 
   throw new HttpError(404, "API route not found.");
