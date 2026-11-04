@@ -63,6 +63,16 @@ create table if not exists public.messages (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.statuses (
+  id text primary key,
+  user_id text not null references public.users(id) on delete cascade,
+  text text not null default '',
+  attachment_path text,
+  attachment_mime text,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
 create table if not exists public.call_history (
   id text primary key,
   chat_id text not null references public.chats(id) on delete cascade,
@@ -184,6 +194,8 @@ create table if not exists public.sessions (
 );
 
 create index if not exists messages_chat_created on public.messages (chat_id, created_at);
+create index if not exists statuses_expires_at on public.statuses (expires_at);
+create index if not exists statuses_user_created on public.statuses (user_id, created_at desc);
 create index if not exists call_history_chat_created on public.call_history (chat_id, created_at);
 create index if not exists user_activity_created on public.user_activity (created_at);
 create index if not exists user_activity_user_created on public.user_activity (user_id, created_at);
@@ -196,6 +208,7 @@ alter table public.pending_profile_updates enable row level security;
 alter table public.chats enable row level security;
 alter table public.chat_members enable row level security;
 alter table public.messages enable row level security;
+alter table public.statuses enable row level security;
 alter table public.call_history enable row level security;
 alter table public.contacts enable row level security;
 alter table public.message_reports enable row level security;

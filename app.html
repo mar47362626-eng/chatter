@@ -72,7 +72,7 @@
       .user-pill-copy strong, .user-pill-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .user-pill-copy strong { font-size: 12px; }
       .user-pill-copy span { margin-top: 2px; color: var(--muted); font-size: 11px; }
-      .sidebar-navigation { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
+      .sidebar-navigation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
       .sidebar-navigation button { border: 0; border-radius: 10px; padding: 8px 4px; background: transparent; color: #78827a; font-size: 10px; font-weight: 750; cursor: pointer; }
       .sidebar-navigation button.active { background: var(--soft-green); color: var(--green); }
       .avatar { display: grid; width: 44px; height: 44px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 16px; background: var(--soft-green); color: var(--green); font-size: 14px; font-weight: 800; }
@@ -166,6 +166,37 @@
       .content-page { min-height: 0; flex: 1; overflow: auto; padding: clamp(20px, 5vw, 52px); }
       .content-page h1 { margin: 0 0 8px; font-size: 29px; letter-spacing: -1.2px; }
       .page-description { margin: 0 0 24px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .status-page { width: min(100%, 840px); align-self: center; }
+      .status-compose { display: grid; gap: 12px; margin: 18px 0 28px; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: white; }
+      .status-compose textarea { width: 100%; min-height: 76px; resize: vertical; border: 1px solid var(--line); border-radius: 13px; padding: 12px; color: var(--ink); }
+      .status-compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .status-photo-button { display: inline-flex; min-height: 40px; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffefa; color: var(--green); cursor: pointer; font-size: 12px; font-weight: 700; }
+      .status-photo-button input { display: none; }
+      .status-photo-preview { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+      .status-photo-preview img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; }
+      .status-section { margin: 22px 0; }
+      .status-section h2 { margin: 0 0 10px; font-size: 14px; }
+      .status-card { display: flex; width: 100%; min-height: 76px; align-items: center; gap: 13px; margin: 6px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 16px; background: #fffefa; text-align: left; cursor: pointer; }
+      .status-card:hover { background: #f7f8f2; }
+      .status-card-avatar { display: grid; width: 48px; height: 48px; flex: 0 0 48px; place-items: center; overflow: hidden; border: 2px solid #45a875; border-radius: 50%; background: var(--soft-green); color: var(--green); font-size: 15px; font-weight: 800; }
+      .status-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .status-card-copy { min-width: 0; flex: 1; }
+      .status-card-copy strong, .status-card-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .status-card-copy strong { font-size: 13px; }
+      .status-card-copy span { margin-top: 5px; color: var(--muted); font-size: 11px; }
+      .status-card-time { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+      .status-viewer { position: fixed; z-index: 40; inset: 0; display: flex; flex-direction: column; padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom)); background: #101914; color: white; }
+      .status-viewer-top, .status-viewer-controls { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; }
+      .status-viewer-top { border-bottom: 1px solid #ffffff22; }
+      .status-viewer-heading { display: flex; min-width: 0; align-items: center; gap: 10px; }
+      .status-viewer-heading span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .status-viewer-close, .status-viewer-controls button { min-width: 40px; min-height: 40px; border: 1px solid #ffffff33; border-radius: 12px; background: #ffffff12; color: white; cursor: pointer; }
+      .status-viewer-content { display: flex; min-height: 0; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 18px 0; text-align: center; }
+      .status-viewer-content img { max-width: 100%; max-height: 58vh; border-radius: 14px; object-fit: contain; }
+      .status-viewer-text { max-width: 760px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: clamp(20px, 5vw, 34px); line-height: 1.45; }
+      .status-viewer-controls { justify-content: center; }
+      .status-viewer-controls button:disabled { opacity: .45; cursor: default; }
+      .status-viewer-delete { color: #ffd2cb !important; }
       .call-card, .settings-card { display: flex; align-items: center; gap: 12px; margin: 9px 0; padding: 14px; border: 1px solid var(--line); border-radius: 17px; background: #fffefa; }
       .call-copy, .setting-copy { min-width: 0; flex: 1; }
       .call-copy strong, .call-copy span, .setting-copy strong, .setting-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -270,7 +301,7 @@
         .composer { gap: 8px; padding: 10px 12px max(11px, env(safe-area-inset-bottom)); }
         .composer textarea { min-height: 44px; padding: 12px; font-size: 16px; }
         .send-button { width: 44px; height: 44px; }
-        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, 1fr); padding: 5px 6px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
+        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(5, 1fr); padding: 5px 4px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
         .mobile-nav button { display: grid; align-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 12px; background: transparent; color: #78827a; font-size: 9px; font-weight: 700; cursor: pointer; }
         .mobile-nav button.active { background: #edf2e8; color: var(--green); }
         .mobile-nav svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
@@ -288,7 +319,7 @@
 
       @media (min-width: 701px) and (max-width: 1024px) {
         .sidebar-navigation { display: none; }
-        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(4, 1fr); padding: 5px 8px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
+        .mobile-nav { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; height: calc(64px + env(safe-area-inset-bottom)); grid-template-columns: repeat(5, 1fr); padding: 5px 4px env(safe-area-inset-bottom); border-top: 1px solid var(--line); background: #fffefaed; backdrop-filter: blur(15px); }
         .mobile-nav button { display: grid; align-content: center; justify-items: center; gap: 3px; border: 0; border-radius: 12px; background: transparent; color: #78827a; font-size: 9px; font-weight: 700; cursor: pointer; }
         .mobile-nav button.active { background: #edf2e8; color: var(--green); }
         .mobile-nav svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
@@ -351,6 +382,7 @@
           <div class="user-pill" id="desktopUser"></div>
           <nav class="sidebar-navigation" aria-label="App navigation">
             <button type="button" class="active" data-page="chats">Chats</button>
+            <button type="button" data-page="statuses">Status</button>
             <button type="button" data-page="communities">Groups</button>
             <button type="button" data-page="calls">Calls</button>
             <button type="button" data-page="settings">Settings</button>
@@ -381,6 +413,7 @@
 
     <nav class="mobile-nav" id="mobileNav" aria-label="App navigation" hidden>
       <button class="active" type="button" data-page="chats" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2 1-4.2A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg>Chats</button>
+      <button type="button" data-page="statuses"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></svg>Status</button>
       <button type="button" data-page="communities"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.5" /><path d="M3.5 19c.4-3 2.4-4.5 5.5-4.5s5.1 1.5 5.5 4.5M15 14.8c2.8-.4 4.7 1.1 5.3 3.7" /></svg>Groups</button>
       <button type="button" data-page="calls"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5C3 13.6 10.4 21 19.5 21a1.5 1.5 0 0 0 1.5-1.5V17l-5-2-2 2c-3-1.2-5.3-3.5-6.5-6.5l2-2L7 3Z" /></svg>Calls</button>
       <button type="button" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.2 1-1.5 2.6-1.5-.6a7.6 7.6 0 0 1-1.7 1l-.2 1.6h-3l-.2-1.6a7.6 7.6 0 0 1-1.7-1l-1.5.6-1.5-2.6 1.2-1a7 7 0 0 1 0-2l-1.2-1 1.5-2.6 1.5.6a7.6 7.6 0 0 1 1.7-1l.2-1.6h3l.2 1.6a7.6 7.6 0 0 1 1.7 1l1.5-.6 1.5 2.6-1.2 1a7 7 0 0 1 0 2Z" /></svg>Settings</button>
@@ -458,6 +491,7 @@
       </section>
     </div>
     <input id="profilePhotoInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+    <div class="status-viewer" id="statusViewer" role="dialog" aria-modal="true" aria-label="Status update" hidden></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script>
@@ -470,6 +504,12 @@
           phoneContacts: [],
           contactsLoaded: false,
           contactsError: "",
+          statuses: [],
+          statusesLoaded: false,
+          statusesError: "",
+          statusPhoto: null,
+          statusDraft: "",
+          statusIndex: -1,
           numberStore: null,
           numberStoreError: "",
           activeId: null,
@@ -991,6 +1031,94 @@
             .sort((a, b) => (b.message.createdAt || "").localeCompare(a.message.createdAt || ""));
         }
 
+        function statusAge(createdAt) {
+          const minutes = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+          if (minutes < 1) return "Just now";
+          if (minutes < 60) return `${minutes} min ago`;
+          const hours = Math.floor(minutes / 60);
+          if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+          return "Expired";
+        }
+
+        function statusCard(status) {
+          const photo = status.avatarUrl
+            ? `<img src="${escapeHtml(status.avatarUrl)}" alt="" />`
+            : escapeHtml(initials(status.name));
+          const preview = status.text || (status.photoUrl ? "Photo update" : "Status update");
+          return `<button class="status-card" type="button" data-status-id="${escapeHtml(status.id)}">
+            <span class="status-card-avatar">${photo}</span>
+            <span class="status-card-copy"><strong>${escapeHtml(status.name)}</strong><span>${escapeHtml(preview)}</span></span>
+            <time class="status-card-time">${escapeHtml(statusAge(status.createdAt))}</time>
+          </button>`;
+        }
+
+        function renderStatusPage() {
+          const panel = $("#panelContent");
+          const mine = state.statuses.filter((status) => status.userId === state.user.id);
+          const contactsById = new Map();
+          for (const status of state.statuses) {
+            if (status.userId === state.user.id) continue;
+            if (!contactsById.has(status.userId)) contactsById.set(status.userId, []);
+            contactsById.get(status.userId).push(status);
+          }
+          panel.className = "content-page status-page";
+          panel.innerHTML = `
+            <h1>Status</h1>
+            <p class="page-description">Share a moment with your Chatter contacts. Updates disappear after 24 hours.</p>
+            <form class="status-compose" id="statusForm">
+              <label for="statusText"><strong>Share an update</strong></label>
+              <textarea id="statusText" maxlength="700" placeholder="What's happening?">${escapeHtml(state.statusDraft)}</textarea>
+              ${state.statusPhoto ? `<div class="status-photo-preview"><img src="data:${escapeHtml(state.statusPhoto.type)};base64,${state.statusPhoto.data}" alt="Selected status photo" /><span>${escapeHtml(state.statusPhoto.name)}</span><button class="text-button" type="button" data-action="remove-status-photo">Remove photo</button></div>` : ""}
+              <div class="status-compose-actions">
+                <label class="status-photo-button">＋ Add photo<input id="statusPhotoInput" type="file" accept="image/jpeg,image/png,image/webp" /></label>
+                <button class="primary-button" type="submit">Share status</button>
+              </div>
+            </form>
+            <section class="status-section" aria-labelledby="myStatusesTitle">
+              <h2 id="myStatusesTitle">My status</h2>
+              ${state.statusesError ? `<div class="empty-note">${escapeHtml(state.statusesError)}<br /><button class="text-button" type="button" data-action="reload-statuses">Try again</button></div>`
+                : !state.statusesLoaded ? `<div class="empty-note">Loading statuses…</div>`
+                : mine.length ? mine.map(statusCard).join("")
+                  : `<div class="empty-note">You haven't shared a status yet. Add a message or photo above.</div>`}
+            </section>
+            <section class="status-section" aria-labelledby="contactsStatusesTitle">
+              <h2 id="contactsStatusesTitle">Recent updates</h2>
+              ${state.statusesError ? `<div class="empty-note">Could not load your contacts' statuses.</div>`
+                : !state.statusesLoaded ? `<div class="empty-note">Loading your contacts' statuses…</div>`
+                : contactsById.size ? [...contactsById.values()].map((statuses) => statuses.map(statusCard).join("")).join("")
+                  : `<div class="empty-note">Your Chatter contacts' new statuses will appear here.</div>`}
+            </section>`;
+        }
+
+        function renderStatusViewer() {
+          const status = state.statuses[state.statusIndex];
+          if (!status) {
+            $("#statusViewer").hidden = true;
+            state.statusIndex = -1;
+            return;
+          }
+          const photo = status.photoUrl ? `<img src="${escapeHtml(status.photoUrl)}" alt="Photo shared in ${escapeHtml(status.name)}'s status" />` : "";
+          const text = status.text ? `<p class="status-viewer-text">${escapeHtml(status.text)}</p>` : "";
+          const owned = status.userId === state.user.id;
+          $("#statusViewer").innerHTML = `
+            <header class="status-viewer-top">
+              <div class="status-viewer-heading">${avatar({ name: status.name, initials: initials(status.name), avatarUrl: status.avatarUrl }, true)}<span><strong>${escapeHtml(status.name)}</strong><br /><small>${escapeHtml(statusAge(status.createdAt))} · disappears after 24 hours</small></span></div>
+              <button class="status-viewer-close" type="button" data-action="close-status-viewer" aria-label="Close status">×</button>
+            </header>
+            <div class="status-viewer-content">${photo}${text}</div>
+            <footer class="status-viewer-controls">
+              <button type="button" data-action="previous-status" ${state.statusIndex >= state.statuses.length - 1 ? "disabled" : ""} aria-label="Older status">‹</button>
+              ${owned ? `<button type="button" class="status-viewer-delete" data-action="delete-status" data-status-id="${escapeHtml(status.id)}">Delete my status</button>` : ""}
+              <button type="button" data-action="next-status" ${state.statusIndex <= 0 ? "disabled" : ""} aria-label="Newer status">›</button>
+            </footer>`;
+          $("#statusViewer").hidden = false;
+        }
+
+        function loadStatusViewer(statusId) {
+          state.statusIndex = state.statuses.findIndex((status) => status.id === statusId);
+          renderStatusViewer();
+        }
+
         function renderDirectory() {
           const panel = $("#panelContent");
           const query = state.directorySearch.toLowerCase();
@@ -1156,6 +1284,8 @@
             panel.innerHTML = `<h1>Calls</h1><p class="page-description">Your recent voice and video conversations.</p>${calls.length ? calls.map(({ chat, message }) => `<button class="call-card" type="button" data-chat-id="${escapeHtml(chat.id)}">
               ${avatar(chat, true)}<span class="call-copy"><strong>${escapeHtml(chat.name)}</strong><span>${message.call.type === "audio" ? "Voice" : "Video"} · ${escapeHtml(message.call.status || "Call")} · ${escapeHtml(message.time || "")}</span></span>
               <span class="call-direction" aria-hidden="true">${message.from === "you" ? "↗" : "↙"}</span></button>`).join("") : `<div class="empty-note">When you have calls, your recent history will appear here.</div>`}`;
+          } else if (state.page === "statuses") {
+            renderStatusPage();
           } else {
             renderSettings();
           }
@@ -1168,6 +1298,11 @@
         function openWorkspace(result) {
           state.user = result.user;
           state.chats = Array.isArray(result.chats) ? result.chats : [];
+          state.statuses = [];
+          state.statusesLoaded = false;
+          state.statusesError = "";
+          state.statusPhoto = null;
+          state.statusDraft = "";
           state.activeId = state.chats[0]?.id || null;
           state.page = "chats";
           $("#authScreen").hidden = true;
@@ -1178,6 +1313,24 @@
           renderPage();
           subscribeToEvents();
           verifyNumberReturn();
+        }
+
+        async function loadStatuses() {
+          state.statusesLoaded = false;
+          state.statusesError = "";
+          if (state.page === "statuses") renderStatusPage();
+          try {
+            const result = await api("/api/statuses");
+            state.statuses = Array.isArray(result.statuses) ? result.statuses : [];
+            state.statusesLoaded = true;
+            if (state.page === "statuses") renderStatusPage();
+            if (!$("#statusViewer").hidden) renderStatusViewer();
+          } catch (error) {
+            state.statusesError = error.message;
+            state.statusesLoaded = true;
+            if (state.page === "statuses") renderStatusPage();
+            toast(`Could not load statuses: ${error.message}`);
+          }
         }
 
         async function loadContacts() {
@@ -1244,6 +1397,10 @@
                 });
                 return;
               }
+              if (update.type === "statuses") {
+                if (state.page === "statuses") loadStatuses();
+                return;
+              }
               if (update.type !== "chats" || !Array.isArray(update.chats)) return;
               state.chats = update.chats;
               if (!state.chats.some((chat) => chat.id === state.activeId)) state.activeId = state.chats[0]?.id || null;
@@ -1274,10 +1431,12 @@
           const pageButton = event.target.closest("[data-page]");
           if (pageButton) {
             state.page = pageButton.dataset.page;
+            $("#statusViewer").hidden = true;
             if (state.page === "communities") state.filter = "groups";
             else if (state.page === "chats" && state.filter === "groups") state.filter = "all";
             renderPage();
             if (state.page === "settings" && !state.numberStore && !state.numberStoreError) loadNumberStore();
+            if (state.page === "statuses") loadStatuses();
             return;
           }
 
@@ -1296,7 +1455,46 @@
             return;
           }
 
+          const statusButton = event.target.closest(".status-card[data-status-id]");
+          if (statusButton) {
+            loadStatusViewer(statusButton.dataset.statusId);
+            return;
+          }
+
           const action = event.target.closest("[data-action]")?.dataset.action;
+          if (action === "close-status-viewer") {
+            $("#statusViewer").hidden = true;
+            state.statusIndex = -1;
+            return;
+          }
+          if (action === "previous-status" || action === "next-status") {
+            state.statusIndex += action === "previous-status" ? 1 : -1;
+            renderStatusViewer();
+            return;
+          }
+          if (action === "remove-status-photo") {
+            state.statusPhoto = null;
+            renderStatusPage();
+            return;
+          }
+          if (action === "reload-statuses") {
+            loadStatuses();
+            return;
+          }
+          if (action === "delete-status") {
+            const statusId = event.target.closest("[data-status-id]")?.dataset.statusId;
+            if (!statusId || !confirm("Delete this status update?")) return;
+            try {
+              await api(`/api/statuses/${encodeURIComponent(statusId)}`, { method: "DELETE" });
+              $("#statusViewer").hidden = true;
+              state.statusIndex = -1;
+              await loadStatuses();
+              toast("Status deleted.");
+            } catch (error) {
+              toast(`Could not delete the status: ${error.message}`);
+            }
+            return;
+          }
           if (action === "call-options") {
             const chat = activeChat();
             if (!chat || chat.group || chat.self || !chat.contactId) {
@@ -1528,6 +1726,10 @@
           loadContacts();
         });
         document.addEventListener("input", (event) => {
+          if (event.target.id === "statusText") {
+            state.statusDraft = event.target.value;
+            return;
+          }
           if (event.target.id !== "directorySearch") return;
           state.directorySearch = event.target.value.trim();
           const position = event.target.selectionStart;
@@ -1535,6 +1737,36 @@
           const input = $("#directorySearch");
           input.focus();
           input.setSelectionRange(position, position);
+        });
+
+        document.addEventListener("change", async (event) => {
+          if (event.target.id !== "statusPhotoInput") return;
+          const file = event.target.files[0];
+          if (!file) return;
+          if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+            toast("Choose a JPEG, PNG, or WebP photo.");
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            toast("Status photos must be 5 MB or smaller.");
+            return;
+          }
+          try {
+            const reader = new FileReader();
+            state.statusPhoto = await new Promise((resolve, reject) => {
+              reader.addEventListener("load", () => {
+                const value = typeof reader.result === "string" ? reader.result : "";
+                const data = value.slice(value.indexOf(",") + 1);
+                if (!data) reject(new Error("Could not read the selected photo."));
+                else resolve({ name: file.name, type: file.type, data });
+              });
+              reader.addEventListener("error", () => reject(new Error("Could not read the selected photo.")));
+              reader.readAsDataURL(file);
+            });
+            renderStatusPage();
+          } catch (error) {
+            toast(error.message);
+          }
         });
 
         $("#loginForm").addEventListener("submit", async (event) => {
@@ -1599,6 +1831,31 @@
         });
 
         document.addEventListener("submit", async (event) => {
+          if (event.target.id === "statusForm") {
+            event.preventDefault();
+            const text = $("#statusText").value.trim();
+            if (!text && !state.statusPhoto) {
+              toast("Write a status or add a photo.");
+              return;
+            }
+            const button = event.target.querySelector('button[type="submit"]');
+            button.disabled = true;
+            try {
+              await api("/api/statuses", {
+                method: "POST",
+                body: JSON.stringify({ text, photo: state.statusPhoto })
+              });
+              state.statusDraft = "";
+              state.statusPhoto = null;
+              await loadStatuses();
+              toast("Your status was shared with your Chatter contacts.");
+            } catch (error) {
+              toast(`Could not share the status: ${error.message}`);
+            } finally {
+              button.disabled = false;
+            }
+            return;
+          }
           if (event.target.id !== "messageForm") return;
           event.preventDefault();
           const input = $("#messageInput");

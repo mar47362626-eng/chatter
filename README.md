@@ -67,6 +67,8 @@ Users register with a valid Nigerian (+234) phone number. In Settings, they can 
 
 In the moderation console, open **Phone numbers** to review paid requests. Approving activates the number for its buyer. To reject a paid request, first issue the refund in Paystack, then use **Reject**; Chatter disables recurring billing and releases the number. The refund itself is manual and must be completed before confirming rejection.
 
+To enable the Status/Updates feature on an existing Supabase database, run the current `supabase-schema.sql` in the Supabase SQL Editor. Status posts can contain text and an optional JPEG, PNG, or WebP photo; they are visible to the poster's saved Chatter contacts and expire after 24 hours.
+
 This feature does not create phone numbers or enable real calls/SMS. Add only numbers that you have lawfully obtained from a carrier. The foreign number works as a Chatter contact identifier only; external calls and SMS still require a connected telecom provider. The app’s existing calls are browser-to-browser WebRTC calls.
 
 Before deploying the new feature, run the updated `supabase-schema.sql` in the Supabase SQL Editor. It creates or migrates the private inventory, subscription, and payment tables, including the customer-owned reservation and pending-approval status. In the live Paystack dashboard, create a **monthly NGN plan for ₦10,000** and configure its webhook URL as:

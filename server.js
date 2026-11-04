@@ -936,6 +936,22 @@ async function sendUserChatUpdates(userId) {
   for (const { chat_id: chatId } of chats) await sendChatUpdate(chatId);
 }
 
+async function notifyStatusContacts(userId) {
+  publish(userId, { type: "statuses" });
+  const contacts = await database.prepare("SELECT owner_id FROM contacts WHERE contact_id = ?").all(userId);
+  for (const contact of contacts) publish(contact.owner_id, { type: "statuses" });
+}
+
+async function cleanupExpiredStatuses() {
+  const expired = await database.prepare("SELECT attachment_path FROM statuses WHERE expires_at <= now() AND attachment_path IS NOT NULL").all();
+  await database.prepare("DELETE FROM statuses WHERE expires_at <= now()").run();
+  for (const item of expired) await removeMediaObject(item.attachment_path);
+}
+
+setInterval(() => {
+  cleanupExpiredStatuses().catch((error) => console.error("Could not expire statuses:", error));
+}, 60 * 60 * 1000).unref();
+
 async function publishPresenceUpdates(userId) {
   publish(userId, { type: "chats", chats: await getUserChats(userId) });
   const contacts = await database.prepare(`
@@ -1876,6 +1892,81 @@ async function handleApi(request, response, url) {
     return servePrivateImage(response, user.avatar_path, extname(user.avatar_path).toLowerCase() === ".png"
       ? "image/png"
       : extname(user.avatar_path).toLowerCase() === ".webp" ? "image/webp" : "image/jpeg");
+  }
+
+  const statusMediaRoute = url.pathname.match(/^\/api\/statuses\/([a-f0-9]+)\/media$/);
+  if (statusMediaRoute && request.method === "GET") {
+    const status = await database.prepare(`
+      SELECT s.attachment_path, s.attachment_mime
+      FROM statuses s
+      WHERE s.id = ? AND s.expires_at > now()
+        AND (s.user_id = ? OR EXISTS (
+          SELECT 1 FROM contacts c WHERE c.owner_id = ? AND c.contact_id = s.user_id
+        ))
+    `).get(statusMediaRoute[1], session.userId, session.userId);
+    if (!status?.attachment_path) throw new HttpError(404, "Status photo not found.");
+    return servePrivateImage(response, status.attachment_path, status.attachment_mime);
+  }
+
+  if (route === "GET /api/statuses") {
+    await cleanupExpiredStatuses();
+    const statuses = await database.prepare(`
+      SELECT s.id, s.user_id, s.text, s.attachment_path, s.created_at, s.expires_at,
+        u.name, u.avatar_path, c.display_name
+      FROM statuses s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN contacts c ON c.owner_id = ? AND c.contact_id = s.user_id
+      WHERE s.expires_at > now()
+        AND (s.user_id = ? OR c.owner_id IS NOT NULL)
+      ORDER BY s.created_at DESC
+    `).all(session.userId, session.userId);
+    return respond(response, 200, {
+      statuses: statuses.map((status) => ({
+        id: status.id,
+        userId: status.user_id,
+        name: status.user_id === session.userId ? "Your status" : status.display_name || status.name,
+        text: status.text,
+        createdAt: status.created_at,
+        expiresAt: status.expires_at,
+        avatarUrl: avatarUrl(status.user_id, status.avatar_path),
+        ...(status.attachment_path ? { photoUrl: `/api/statuses/${status.id}/media` } : {})
+      }))
+    });
+  }
+
+  if (route === "POST /api/statuses") {
+    const input = await readJson(request, Math.ceil(maxImageBytes / 3) * 4 + 16 * 1024);
+    const text = typeof input.text === "string" ? input.text.trim() : "";
+    if (text.length > 700) throw new HttpError(400, "Status text must be 700 characters or fewer.");
+    const photo = input.photo ? imagePayload(input.photo) : null;
+    if (!text && !photo) throw new HttpError(400, "Write a status or add a photo.");
+    const id = randomBytes(16).toString("hex");
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+    const photoPath = photo ? `statuses/${session.userId}/${id}.${photo.extension}` : null;
+    if (photo) await uploadMediaObject(photoPath, photo.bytes, photo.mimeType);
+    try {
+      await database.prepare(`
+        INSERT INTO statuses (id, user_id, text, attachment_path, attachment_mime, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, session.userId, text, photoPath, photo?.mimeType || null, createdAt.toISOString(), expiresAt.toISOString());
+    } catch (error) {
+      if (photoPath) await removeMediaObject(photoPath);
+      throw error;
+    }
+    await recordUserActivity(session.userId, "status.created", { hasPhoto: Boolean(photo) });
+    await notifyStatusContacts(session.userId);
+    return respond(response, 201, { ok: true, id });
+  }
+
+  const statusRoute = url.pathname.match(/^\/api\/statuses\/([a-f0-9]+)$/);
+  if (statusRoute && request.method === "DELETE") {
+    const status = await database.prepare("SELECT attachment_path FROM statuses WHERE id = ? AND user_id = ?").get(statusRoute[1], session.userId);
+    if (!status) throw new HttpError(404, "Status not found.");
+    await database.prepare("DELETE FROM statuses WHERE id = ? AND user_id = ?").run(statusRoute[1], session.userId);
+    if (status.attachment_path) await removeMediaObject(status.attachment_path);
+    await notifyStatusContacts(session.userId);
+    return respond(response, 200, { ok: true });
   }
 
   const chatMediaRoute = url.pathname.match(/^\/api\/chats\/([a-f0-9]+)\/media\/([a-f0-9]+)$/);
