@@ -1127,8 +1127,16 @@
             input.addEventListener("focus", () => {
               requestAnimationFrame(() => {
                 syncMessageScroll(true);
-                input.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                if (!window.matchMedia("(max-width: 700px)").matches) {
+                  input.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                }
+                $("#workspace")?.classList.toggle("mobile-chat-open", true);
               });
+            });
+            input.addEventListener("blur", () => {
+              if (window.matchMedia("(max-width: 700px)").matches && input.value.trim().length > 0) {
+                requestAnimationFrame(() => input.focus());
+              }
             });
             input.addEventListener("keydown", (event) => {
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -1382,7 +1390,14 @@
             </section>`;
         }
 
+        function keepMobileComposerOpen() {
+          const input = $("#messageInput");
+          return Boolean(window.matchMedia("(max-width: 700px)").matches && input && (document.activeElement === input || input.value.trim().length > 0));
+        }
+
         function renderPage() {
+          const mobile = window.matchMedia("(max-width: 700px)").matches;
+          const composerDraft = mobile && $("#messageInput") && document.activeElement === $("#messageInput") ? $("#messageInput").value : "";
           renderList();
           document.querySelectorAll(".mobile-nav [data-page]").forEach((button) => {
             const selected = button.dataset.page === state.page || (state.page === "new-chat" && button.dataset.page === "chats");
@@ -1395,7 +1410,20 @@
           });
           const panel = $("#panelContent");
           if (state.page === "chats") {
-            renderConversation(activeChat());
+            const shouldRestoreComposer = mobile && $("#messageInput") && document.activeElement === $("#messageInput");
+            if (shouldRestoreComposer) {
+              renderConversation(activeChat());
+              requestAnimationFrame(() => {
+                const input = $("#messageInput");
+                if (!input) return;
+                input.value = composerDraft;
+                input.focus();
+                const end = input.value.length;
+                input.setSelectionRange(end, end);
+              });
+            } else {
+              renderConversation(activeChat());
+            }
           } else if (state.page === "new-chat") {
             renderDirectory();
           } else if (state.page === "communities") {
@@ -1412,8 +1440,7 @@
           } else {
             renderSettings();
           }
-          const mobile = window.matchMedia("(max-width: 700px)").matches;
-          $("#workspace").classList.toggle("mobile-chat-open", mobile && (state.page !== "chats" || Boolean(activeChat())));
+          $("#workspace").classList.toggle("mobile-chat-open", mobile && ((state.page !== "chats" || Boolean(activeChat())) || keepMobileComposerOpen()));
           $("#mainPanel").hidden = false;
           $("#mobileNav").hidden = !window.matchMedia("(max-width: 1024px)").matches;
         }
