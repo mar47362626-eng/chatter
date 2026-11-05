@@ -136,7 +136,7 @@ const conversationList = document.querySelector("#conversationList");
 const headerPerson = document.querySelector("#headerPerson");
 const chatIntro = document.querySelector("#chatIntro");
 const messages = document.querySelector("#messages");
-const messageArea = document.querySelector("#messageArea");
+const messageArea = document.querySelector("#messageArea, #messageScroll");
 const messageForm = document.querySelector("#messageForm");
 const messageInput = document.querySelector("#messageInput");
 function updateVisualViewportHeight() {
@@ -555,7 +555,9 @@ function renderMessages() {
       </div>`;
   }).join("");
   renderMessageSearchCount();
-  messageArea.scrollTop = messageArea.scrollHeight;
+  if (messageArea) {
+    messageArea.scrollTop = messageArea.scrollHeight;
+  }
 }
 
 function renderMessageSearchCount() {
