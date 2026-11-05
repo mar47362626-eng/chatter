@@ -1064,7 +1064,7 @@
           panel.className = "content-page status-page";
           panel.innerHTML = `
             <h1>Status</h1>
-            <p class="page-description">Share a moment with your Chatter contacts. Updates disappear after 24 hours.</p>
+            <p class="page-description">Share a moment with your Chatter contacts. Recent updates from connected contacts appear here and disappear after 24 hours.</p>
             <form class="status-compose" id="statusForm">
               <label for="statusText"><strong>Share an update</strong></label>
               <textarea id="statusText" maxlength="700" placeholder="What's happening?">${escapeHtml(state.statusDraft)}</textarea>
@@ -1086,7 +1086,7 @@
               ${state.statusesError ? `<div class="empty-note">Could not load your contacts' statuses.</div>`
                 : !state.statusesLoaded ? `<div class="empty-note">Loading your contacts' statuses…</div>`
                 : contactsById.size ? [...contactsById.values()].map((statuses) => statuses.map(statusCard).join("")).join("")
-                  : `<div class="empty-note">Your Chatter contacts' new statuses will appear here.</div>`}
+                  : `<div class="empty-note">No recent statuses from your Chatter contacts yet. Their new updates will appear here.</div>`}
             </section>`;
         }
 
