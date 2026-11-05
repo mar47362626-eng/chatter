@@ -386,7 +386,7 @@
       <div class="welcome-layout">
         <div class="welcome-copy">
           <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
-          <h1>Good times are better <span>together.</span></h1>
+          <h1 id="welcomeTitle">Good times are better <span>together.</span></h1>
           <p class="welcome-lede">A simple place to catch up, share little moments, and stay close to the people who matter.</p>
           <ul class="welcome-features">
             <li><span class="welcome-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2 1-4.2A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg></span>Message friends and make group plans</li>
@@ -394,7 +394,7 @@
             <li><span class="welcome-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></svg></span>Share status updates that last 24 hours</li>
           </ul>
           <div class="welcome-actions">
-            <button class="primary-button" type="button" data-welcome-action="register">Create your account <span aria-hidden="true">→</span></button>
+            <button class="primary-button" type="button" data-welcome-action="continue">Create your account <span aria-hidden="true">→</span></button>
             <button class="welcome-login" type="button" data-welcome-action="login">I already have an account</button>
           </div>
           <p class="welcome-note">Your people are just one conversation away.</p>
@@ -581,6 +581,10 @@
           statusPhoto: null,
           statusDraft: "",
           statusIndex: -1,
+          pushConfig: null,
+          pushEnabled: false,
+          pushSupported: true,
+          pushError: "",
           numberStore: null,
           numberStoreError: "",
           activeId: null,
@@ -588,7 +592,8 @@
           filter: "all",
           search: "",
           directorySearch: "",
-          pendingEmail: ""
+          pendingEmail: "",
+          welcomeSession: null
         };
         let toastTimer;
         let events;
@@ -637,6 +642,12 @@
           node.classList.add("visible");
           clearTimeout(toastTimer);
           toastTimer = setTimeout(() => node.classList.remove("visible"), 3000);
+        }
+
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.addEventListener("message", (event) => {
+            if (event.data?.type === "message-notification") toast(`New message from ${event.data.title}.`);
+          });
         }
 
         function setAuthMode(mode) {
@@ -1318,6 +1329,14 @@
               <button class="text-button" type="button" data-action="edit-profile">Back to details</button>
             </form>
             <section class="settings-section">
+              <h2>Message notifications</h2>
+              <p>Get an alert on this phone when someone messages you, including when Chatter is in the background. You can turn notifications off here or in your phone settings.</p>
+              ${state.pushError ? `<p class="form-error" role="alert">${escapeHtml(state.pushError)}</p>` : ""}
+              ${!state.pushSupported ? `<p class="page-description">Background notifications are not supported in this browser. Install Chatter from your browser or home screen to enable them.</p>`
+                : state.pushConfig && !state.pushConfig.enabled ? `<p class="page-description">Phone notifications are not configured on the Chatter server yet.</p>`
+                  : `<button class="primary-button" type="button" data-action="${state.pushEnabled ? "disable-notifications" : "enable-notifications"}" ${!state.pushConfig ? "disabled" : ""}>${state.pushEnabled ? "Turn off message notifications" : "Turn on message notifications"}</button>`}
+            </section>
+            <section class="settings-section">
               <h2>International Chatter number</h2>
               <p>Request an available international number as your Chatter contact number. Payment reserves it for your account; it becomes active after admin approval. This number does not support external calls or SMS.</p>
               ${renderNumberStore()}
@@ -1384,6 +1403,56 @@
           renderPage();
           subscribeToEvents();
           verifyNumberReturn();
+        }
+
+        function urlBase64ToUint8Array(value) {
+          const padding = "=".repeat((4 - value.length % 4) % 4);
+          const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+          return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+        }
+
+        async function loadPushSettings() {
+          state.pushError = "";
+          state.pushSupported = Boolean(
+            "Notification" in window &&
+            "serviceWorker" in navigator &&
+            "PushManager" in window
+          );
+          state.pushEnabled = false;
+          if (!state.pushSupported) {
+            if (state.page === "settings") renderSettings();
+            return;
+          }
+          try {
+            state.pushConfig = await api("/api/push/config");
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.getSubscription();
+            state.pushEnabled = Boolean(subscription);
+            if (subscription && state.pushConfig.enabled) {
+              await api("/api/push/subscriptions", {
+                method: "POST",
+                body: JSON.stringify(subscription.toJSON())
+              });
+            }
+          } catch (error) {
+            state.pushError = error.message;
+          }
+          if (state.page === "settings") renderSettings();
+        }
+
+        async function disablePushNotifications() {
+          const registration = await navigator.serviceWorker.ready;
+          const subscription = await registration.pushManager.getSubscription();
+          if (!subscription) {
+            state.pushEnabled = false;
+            return;
+          }
+          await api("/api/push/subscriptions", {
+            method: "DELETE",
+            body: JSON.stringify({ endpoint: subscription.endpoint })
+          });
+          await subscription.unsubscribe();
+          state.pushEnabled = false;
         }
 
         async function loadStatuses() {
@@ -1496,30 +1565,31 @@
           if (errorMessage) $("#loginError").textContent = errorMessage;
         }
 
-        function hasSeenWelcome() {
-          try {
-            return window.localStorage.getItem("chatter-welcome-seen") === "1";
-          } catch (error) {
-            console.warn("Could not read the welcome-screen preference.", error);
-            return false;
-          }
-        }
-
-        function showWelcome() {
+        function showWelcome(session) {
+          state.welcomeSession = session.user ? session : null;
           $("#authScreen").hidden = true;
           $("#workspace").hidden = true;
           $("#mobileNav").hidden = true;
+          $("#welcomeTitle").innerHTML = session.user
+            ? `Welcome back, <span>${escapeHtml(session.user.name || "friend")}.</span>`
+            : `Good times are better <span>together.</span>`;
+          const continueButton = document.querySelector('[data-welcome-action="continue"]');
+          continueButton.innerHTML = session.user
+            ? `Continue to Chatter <span aria-hidden="true">→</span>`
+            : `Create your account <span aria-hidden="true">→</span>`;
+          document.querySelector('[data-welcome-action="login"]').hidden = Boolean(session.user);
           $("#welcomeScreen").hidden = false;
           finishBoot();
         }
 
         function continueFromWelcome(mode) {
-          try {
-            window.localStorage.setItem("chatter-welcome-seen", "1");
-          } catch (error) {
-            console.warn("Could not save the welcome-screen preference.", error);
-          }
           $("#welcomeScreen").hidden = true;
+          if (state.welcomeSession) {
+            const session = state.welcomeSession;
+            state.welcomeSession = null;
+            openWorkspace(session);
+            return;
+          }
           $("#authScreen").hidden = false;
           setAuthMode(mode);
           if (mode === "register") $("#registerName").focus();
@@ -1529,7 +1599,7 @@
         document.addEventListener("click", async (event) => {
           const welcomeButton = event.target.closest("[data-welcome-action]");
           if (welcomeButton) {
-            continueFromWelcome(welcomeButton.dataset.welcomeAction);
+            continueFromWelcome(welcomeButton.dataset.welcomeAction === "continue" ? "register" : "login");
             return;
           }
 
@@ -1544,6 +1614,7 @@
             else if (state.page === "chats" && state.filter === "groups") state.filter = "all";
             renderPage();
             if (state.page === "settings" && !state.numberStore && !state.numberStoreError) loadNumberStore();
+            if (state.page === "settings") loadPushSettings();
             if (state.page === "statuses") loadStatuses();
             return;
           }
@@ -1570,6 +1641,54 @@
           }
 
           const action = event.target.closest("[data-action]")?.dataset.action;
+          if (action === "enable-notifications") {
+            if (!state.pushConfig?.enabled) {
+              toast("Phone notifications are not configured on the Chatter server yet.");
+              return;
+            }
+            if (Notification.permission === "denied") {
+              toast("Notifications are blocked for Chatter. Allow them in your phone or browser settings.");
+              return;
+            }
+            try {
+              const permission = await Notification.requestPermission();
+              if (permission !== "granted") {
+                toast("Allow notifications in your phone or browser prompt to receive new-message alerts.");
+                return;
+              }
+              const registration = await navigator.serviceWorker.ready;
+              const existing = await registration.pushManager.getSubscription();
+              const subscription = existing || await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(state.pushConfig.publicKey)
+              });
+              await api("/api/push/subscriptions", {
+                method: "POST",
+                body: JSON.stringify(subscription.toJSON())
+              });
+              state.pushEnabled = true;
+              state.pushError = "";
+              renderSettings();
+              toast("Message notifications are on for this device.");
+            } catch (error) {
+              state.pushError = error.message;
+              renderSettings();
+              toast(`Could not enable notifications: ${error.message}`);
+            }
+            return;
+          }
+          if (action === "disable-notifications") {
+            try {
+              await disablePushNotifications();
+              renderSettings();
+              toast("Message notifications are off on this device.");
+            } catch (error) {
+              state.pushError = error.message;
+              renderSettings();
+              toast(`Could not turn off notifications: ${error.message}`);
+            }
+            return;
+          }
           if (action === "close-status-viewer") {
             $("#statusViewer").hidden = true;
             state.statusIndex = -1;
@@ -1733,6 +1852,7 @@
             try {
               if (activeCall) await endCall();
               else if (incomingCall) await declineIncomingCall();
+              if (state.pushSupported) await disablePushNotifications();
               await api("/api/logout", { method: "POST" });
               showAuth();
               toast("You are signed out.");
@@ -2178,9 +2298,7 @@
         }
 
         api("/api/session").then((result) => {
-          if (result.user) openWorkspace(result);
-          else if (hasSeenWelcome()) showAuth();
-          else showWelcome();
+          showWelcome(result);
         }).catch((error) => {
           console.error("Could not restore the Chatter session.", error);
           showAuth(`Could not connect to Chatter: ${error.message}`);

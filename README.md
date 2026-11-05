@@ -4,7 +4,7 @@ Chatter is a chat application served by Node.js. Its public home page introduces
 
 Open `/app` (or `/app.html`) for the standalone mobile and tablet app. It shares the same accounts and conversations as the main site, with its own contact picker (including device contacts on supported browsers), group creation, profile-photo and account-detail editing, and international Chatter number requests in Settings. On supported browsers, install it from the browser's **Install app** or **Add to Home Screen** option; it has its own icon, startup screen, and cached app shell.
 
-The `android/` folder contains an Android Studio WebView app project for the live Chatter app, including a branded native loading screen and camera/microphone permission handling. Build an APK from Android Studio by opening that folder and selecting **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Java and the Android SDK are build prerequisites and are not included in the project.
+The `android/` folder contains an Android Studio WebView app project for the live Chatter app, including a branded native loading screen and camera/microphone permission handling. Build an APK from Android Studio by opening that folder and selecting **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Java and the Android SDK are build prerequisites and are not included in the project. Background push delivery is supported by installed web/PWA clients; native Android APK push needs Firebase Cloud Messaging setup.
 
 ## Requirements
 
@@ -67,7 +67,13 @@ Users register with a valid Nigerian (+234) phone number. In Settings, they can 
 
 In the moderation console, open **Phone numbers** to review paid requests. Approving activates the number for its buyer. To reject a paid request, first issue the refund in Paystack, then use **Reject**; Chatter disables recurring billing and releases the number. The refund itself is manual and must be completed before confirming rejection.
 
-To enable the Status/Updates feature on an existing Supabase database, run the current `supabase-schema.sql` in the Supabase SQL Editor. Status posts can contain text and an optional JPEG, PNG, or WebP photo; users can see each other's updates when either user has saved the other as a Chatter contact. Statuses expire after 24 hours.
+To enable the Status/Updates and message-notification features on an existing Supabase database, run the current `supabase-schema.sql` in the Supabase SQL Editor. Status posts can contain text and an optional JPEG, PNG, or WebP photo; users can see each other's updates when either user has saved the other as a Chatter contact. Statuses expire after 24 hours.
+
+### Phone message notifications
+
+Browser/PWA users can turn on message notifications in **Settings → Message notifications**. Notifications are opt-in and require a supported browser; on iPhone/iPad, install Chatter to the Home Screen first. Generate VAPID keys with `npx web-push generate-vapid-keys`, then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (for example, `mailto:hello@your-domain.com`) in the server's environment. Keep the private key only in server environment settings. The `push_subscriptions` table is added by `supabase-schema.sql`.
+
+The downloaded Android WebView APK does not receive background push notifications yet. Native APK push needs a Firebase project, Android Firebase configuration, and server-side Firebase credentials; browser notification permission alone cannot provide it. Camera and microphone permissions are requested when a user starts a call. Chatter does not request location because it currently has no location feature.
 
 This feature does not create phone numbers or enable real calls/SMS. Add only numbers that you have lawfully obtained from a carrier. The foreign number works as a Chatter contact identifier only; external calls and SMS still require a connected telecom provider. The app’s existing calls are browser-to-browser WebRTC calls.
 

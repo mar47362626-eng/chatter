@@ -5,6 +5,7 @@ const { existsSync, readFileSync, statSync } = require("node:fs");
 const { extname, join, normalize } = require("node:path");
 const { getCountries, getCountryCallingCode, isValidPhoneNumber, parsePhoneNumber } = require("libphonenumber-js");
 const phoneMetadata = require("libphonenumber-js/metadata.max.json");
+const webPush = require("web-push");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
@@ -106,6 +107,19 @@ const callLifetime = 4 * 60 * 60 * 1000;
 const maxRequestBytes = 1024 * 1024;
 const maxImageBytes = 5 * 1024 * 1024;
 const mediaBucket = "chatter-media";
+const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
+const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
+const vapidSubject = process.env.VAPID_SUBJECT || "";
+if (Boolean(vapidPublicKey) !== Boolean(vapidPrivateKey) || (vapidPublicKey && !vapidSubject)) {
+  throw new Error("Configure VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT together to enable push notifications.");
+}
+if (vapidPublicKey) {
+  try {
+    webPush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+  } catch (error) {
+    throw new Error("VAPID push notification configuration is invalid.", { cause: error });
+  }
+}
 const numberSubscriptionAmount = 1000000;
 const numberSubscriptionCurrency = "NGN";
 const moderatorPassword = process.env.CHATTER_MODERATOR_PASSWORD || "";
@@ -936,6 +950,39 @@ async function sendUserChatUpdates(userId) {
   for (const { chat_id: chatId } of chats) await sendChatUpdate(chatId);
 }
 
+async function sendMessagePushNotifications(chatId, senderId) {
+  if (!vapidPublicKey) return;
+  const [recipients, sender] = await Promise.all([
+    database.prepare(`
+      SELECT s.endpoint, s.p256dh, s.auth
+      FROM push_subscriptions s
+      JOIN chat_members cm ON cm.user_id = s.user_id
+      WHERE cm.chat_id = ? AND cm.user_id != ?
+    `).all(chatId, senderId),
+    database.prepare("SELECT name FROM users WHERE id = ?").get(senderId)
+  ]);
+  if (!sender || !recipients.length) return;
+  const payload = JSON.stringify({
+    title: sender.name,
+    body: "Sent you a message. Open Chatter to read it.",
+    url: "/app"
+  });
+  await Promise.all(recipients.map(async (subscription) => {
+    try {
+      await webPush.sendNotification({
+        endpoint: subscription.endpoint,
+        keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+      }, payload, { TTL: 60, timeout: 5000 });
+    } catch (error) {
+      if (error.statusCode === 404 || error.statusCode === 410) {
+        await database.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(subscription.endpoint);
+      } else {
+        console.error("Could not send a message push notification:", error.statusCode || error.message);
+      }
+    }
+  }));
+}
+
 async function notifyStatusContacts(userId) {
   publish(userId, { type: "statuses" });
   const contacts = await database.prepare(`
@@ -1608,6 +1655,53 @@ async function handleApi(request, response, url) {
   }
 
   const session = await requireSession(request, response);
+  if (route === "GET /api/push/config") {
+    return respond(response, 200, { enabled: Boolean(vapidPublicKey), publicKey: vapidPublicKey });
+  }
+
+  if (route === "POST /api/push/subscriptions") {
+    if (!vapidPublicKey) throw new HttpError(503, "Phone notifications are not configured on the server yet.");
+    const input = await readJson(request);
+    const endpoint = typeof input.endpoint === "string" ? input.endpoint : "";
+    let endpointUrl;
+    try {
+      endpointUrl = new URL(endpoint);
+    } catch {
+      throw new HttpError(400, "The browser returned an invalid notification endpoint.");
+    }
+    const hostname = endpointUrl.hostname.toLowerCase();
+    const approvedPushHost = hostname === "fcm.googleapis.com" ||
+      hostname === "web.push.apple.com" || hostname.endsWith(".push.apple.com") ||
+      hostname === "push.services.mozilla.com" || hostname.endsWith(".push.services.mozilla.com") ||
+      hostname === "notify.windows.com" || hostname.endsWith(".notify.windows.com");
+    if (endpointUrl.protocol !== "https:" || endpointUrl.username || endpointUrl.password ||
+      endpointUrl.port && endpointUrl.port !== "443" || !approvedPushHost) {
+      throw new HttpError(400, "The browser returned an invalid notification endpoint.");
+    }
+    const p256dh = input.keys?.p256dh;
+    const auth = input.keys?.auth;
+    if (endpoint.length > 2048 || typeof p256dh !== "string" || !/^[A-Za-z0-9_-]{80,120}$/.test(p256dh) ||
+      typeof auth !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(auth)) {
+      throw new HttpError(400, "The browser returned invalid notification keys.");
+    }
+    await database.prepare(`
+      INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh,
+        auth = excluded.auth, created_at = excluded.created_at
+    `).run(randomBytes(16).toString("hex"), session.userId, endpoint, p256dh, auth, new Date().toISOString());
+    return respond(response, 201, { ok: true });
+  }
+
+  if (route === "DELETE /api/push/subscriptions") {
+    const input = await readJson(request);
+    if (typeof input.endpoint !== "string" || input.endpoint.length > 2048) {
+      throw new HttpError(400, "Choose a valid notification subscription.");
+    }
+    await database.prepare("DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?").run(session.userId, input.endpoint);
+    return respond(response, 200, { ok: true });
+  }
+
   if (route === "POST /api/profile/send-code") {
     if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) {
       throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
@@ -2316,6 +2410,9 @@ async function handleApi(request, response, url) {
       }
       await recordUserActivity(session.userId, "message.sent", { conversationType: chat.type, hasAttachment: Boolean(attachment) });
       await sendChatUpdate(chatId);
+      sendMessagePushNotifications(chatId, session.userId).catch((error) => {
+        console.error("Could not send message push notifications:", error);
+      });
       return respond(response, 201, { ok: true });
     }
 

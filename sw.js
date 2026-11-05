@@ -1,4 +1,4 @@
-const CACHE_NAME = "chatter-app-shell-v3";
+const CACHE_NAME = "chatter-app-shell-v4";
 const APP_SHELL = ["/app", "/manifest.webmanifest", "/chatter-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -52,5 +52,46 @@ self.addEventListener("fetch", (event) => {
       await cache.put(request, response.clone());
     }
     return response;
+  })());
+});
+
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let payload = {};
+    try {
+      payload = event.data?.json() || {};
+    } catch (error) {
+      console.error("Could not read the Chatter push notification.", error);
+    }
+
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const visibleWindow = windows.find((client) => client.visibilityState === "visible");
+    if (visibleWindow) {
+      visibleWindow.postMessage({ type: "message-notification", title: payload.title || "Chatter" });
+      return;
+    }
+
+    await self.registration.showNotification(payload.title || "Chatter", {
+      body: payload.body || "You have a new message.",
+      icon: "/chatter-icon.svg",
+      badge: "/chatter-icon.svg",
+      tag: payload.tag || "chatter-new-message",
+      data: { url: "/app" }
+    });
+  })());
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const destination = new URL("/app", self.location.origin).href;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windows) {
+      if (client.url.startsWith(self.location.origin) && "focus" in client) {
+        await client.navigate(destination);
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(destination);
   })());
 });
