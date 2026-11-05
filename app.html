@@ -178,7 +178,7 @@
       .call-control-button { min-height: 42px; border: 1px solid #ffffff35; border-radius: 22px; padding: 0 15px; background: #ffffff14; color: white; cursor: pointer; font-size: 12px; font-weight: 650; }
       .call-control-button:disabled { opacity: .6; cursor: wait; }
       .toast { z-index: 50; }
-      .message-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 24px clamp(16px, 5vw, 70px); background-color: #f8f8f2; background-image: radial-gradient(#d9e2d222 .8px, transparent .8px); background-size: 16px 16px; }
+      .message-scroll { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 10px; overflow: auto; padding: 24px clamp(16px, 5vw, 70px) calc(24px + 12px); scroll-padding-bottom: 18px; background-color: #f8f8f2; background-image: radial-gradient(#d9e2d222 .8px, transparent .8px); background-size: 16px 16px; }
       .day-label { align-self: center; margin: 2px 0 8px; border: 1px solid #e8e9df; border-radius: 99px; padding: 6px 11px; background: #fffefaed; color: #758076; font-size: 10px; font-weight: 700; }
       .message { max-width: min(78%, 520px); padding: 11px 13px 8px; border: 1px solid #e8e9e1; border-radius: 5px 17px 17px 17px; background: white; box-shadow: 0 4px 12px #20301c08; overflow-wrap: anywhere; }
       .message.outgoing { align-self: flex-end; border-color: #dbe9c7; border-radius: 17px 5px 17px 17px; background: #eaf3dc; }
@@ -186,8 +186,8 @@
       .message-text { margin: 0; white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
       .message-time { display: block; margin-top: 6px; color: #899389; font-size: 9px; text-align: right; }
       .message-image { display: block; max-width: min(100%, 330px); max-height: 250px; margin-bottom: 7px; border-radius: 10px; object-fit: cover; }
-      .composer { display: flex; align-items: flex-end; gap: 9px; padding: 14px 20px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: white; }
-      .composer textarea { min-height: 46px; max-height: 130px; flex: 1; resize: none; border: 1px solid var(--line); border-radius: 15px; padding: 13px 15px; background: #fafaf6; color: var(--ink); font-size: 13px; }
+      .composer { position: sticky; right: 0; bottom: 0; z-index: 3; display: flex; flex-shrink: 0; align-items: flex-end; gap: 9px; padding: 14px 20px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(5px); }
+      .composer textarea { min-height: 46px; max-height: 130px; flex: 1; resize: none; overflow-y: auto; border: 1px solid var(--line); border-radius: 15px; padding: 13px 15px; background: #fafaf6; color: var(--ink); font-size: 13px; line-height: 1.4; }
       .send-button { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 15px; background: var(--green); color: white; cursor: pointer; }
       .send-button:hover { background: var(--green-deep); }
       .send-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
@@ -1101,11 +1101,29 @@
               ${chat.messages.length ? `<span class="day-label">Your conversation</span>${chat.messages.map(messageMarkup).join("")}` : `<div class="empty-state"><span class="empty-art" aria-hidden="true">✦</span><h2>Say hello to ${escapeHtml(chat.name.split(" ")[0])}.</h2><p>This is the start of your conversation.</p></div>`}
             </div>
             <form class="composer" id="messageForm">
-              <textarea id="messageInput" inputmode="text" enterkeyhint="send" autocapitalize="sentences" maxlength="4000" rows="1" placeholder="Write a message..." aria-label="Write a message"></textarea>
+              <textarea id="messageInput" inputmode="text" enterkeyhint="send" autocapitalize="sentences" autocomplete="off" autocorrect="on" spellcheck="true" maxlength="4000" rows="1" placeholder="Write a message..." aria-label="Write a message"></textarea>
               <button class="send-button" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7.5 18-3.8-7.7L2 9.5 21 3Z" /><path d="M9.7 13.3 21 3" /></svg></button>
             </form>`;
           const scroller = $("#messageScroll");
-          if (scroller) scroller.scrollTop = scroller.scrollHeight;
+          const input = $("#messageInput");
+          if (scroller) {
+            scroller.scrollTop = scroller.scrollHeight;
+            scroller.scrollTo({ top: scroller.scrollHeight, behavior: "instant" });
+          }
+          if (input) {
+            input.addEventListener("input", () => {
+              input.style.height = "auto";
+              input.style.height = `${Math.min(input.scrollHeight, 130)}px`;
+              const currentScroll = $("#messageScroll");
+              if (currentScroll) currentScroll.scrollTop = currentScroll.scrollHeight;
+            });
+            input.addEventListener("focus", () => {
+              requestAnimationFrame(() => {
+                const currentScroll = $("#messageScroll");
+                if (currentScroll) currentScroll.scrollTop = currentScroll.scrollHeight;
+              });
+            });
+          }
         }
 
         function callRows() {
