@@ -35,6 +35,38 @@
       button { color: inherit; }
       button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #9dbb72; outline-offset: 2px; }
 
+      .welcome-screen { display: grid; min-height: 100%; place-items: center; overflow: auto; padding: 28px; background: radial-gradient(ellipse at 12% 9%, #dfe9c8 0, transparent 34%), radial-gradient(ellipse at 91% 92%, #d9e8d8 0, transparent 38%), var(--paper); }
+      .welcome-layout { display: grid; width: min(100%, 1020px); min-height: min(690px, calc(100dvh - 56px)); grid-template-columns: minmax(0, 1.05fr) minmax(320px, .95fr); overflow: hidden; border: 1px solid #ffffffc9; border-radius: 32px; background: #fffefa; box-shadow: var(--shadow); }
+      .welcome-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(30px, 6vw, 72px); }
+      .welcome-copy h1 { max-width: 580px; margin: 34px 0 15px; font-size: clamp(39px, 6vw, 64px); letter-spacing: -3.4px; line-height: 1.02; }
+      .welcome-copy h1 span { color: var(--green); }
+      .welcome-lede { max-width: 460px; margin: 0; color: #647269; font-size: 16px; line-height: 1.7; }
+      .welcome-features { display: grid; gap: 12px; margin: 29px 0 32px; padding: 0; list-style: none; }
+      .welcome-features li { display: flex; align-items: center; gap: 12px; color: #34443b; font-size: 13px; font-weight: 650; }
+      .welcome-feature-icon { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border-radius: 12px; background: #edf3e6; color: var(--green); }
+      .welcome-feature-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+      .welcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+      .welcome-actions .primary-button { min-width: 190px; min-height: 52px; border-radius: 16px; font-size: 14px; }
+      .welcome-login { min-height: 48px; padding: 0 16px; border: 1px solid var(--line); border-radius: 15px; background: transparent; color: var(--green); font-size: 13px; font-weight: 750; cursor: pointer; }
+      .welcome-login:hover { background: #f5f7f1; }
+      .welcome-note { margin: 17px 0 0; color: #879188; font-size: 11px; }
+      .welcome-art { position: relative; display: grid; min-height: 420px; place-items: center; overflow: hidden; padding: 32px; background: linear-gradient(145deg, #eaf1df, #dceade 55%, #cbded0); }
+      .welcome-art::before, .welcome-art::after { position: absolute; width: 290px; height: 290px; border: 1px solid #ffffff70; border-radius: 50%; content: ""; }
+      .welcome-art::after { width: 390px; height: 390px; }
+      .welcome-chat-card { position: relative; z-index: 1; width: min(100%, 340px); padding: 21px; border: 1px solid #ffffffb8; border-radius: 23px; background: #fffefaed; box-shadow: 0 22px 65px #2633231c; transform: rotate(-2deg); }
+      .welcome-chat-header { display: flex; align-items: center; gap: 11px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+      .welcome-avatar { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 15px; background: #dcebcf; color: var(--green); font-weight: 850; }
+      .welcome-chat-header strong, .welcome-chat-header small { display: block; }
+      .welcome-chat-header strong { font-size: 12px; }
+      .welcome-chat-header small { margin-top: 3px; color: #728078; font-size: 10px; }
+      .welcome-message { width: fit-content; max-width: 90%; margin-top: 14px; padding: 11px 13px; border-radius: 5px 15px 15px 15px; background: #f0f2e9; color: #39463e; font-size: 11px; line-height: 1.5; }
+      .welcome-message.outgoing { margin-left: auto; border-radius: 15px 5px 15px 15px; background: #e6f0dc; }
+      .welcome-status-chip { position: absolute; right: 12%; bottom: 13%; z-index: 2; display: flex; align-items: center; gap: 9px; padding: 10px 14px 10px 10px; border: 1px solid #ffffffd1; border-radius: 16px; background: white; box-shadow: 0 14px 35px #26332320; transform: rotate(4deg); }
+      .welcome-status-ring { display: grid; width: 35px; height: 35px; place-items: center; border: 2px solid #54a97b; border-radius: 50%; color: var(--green); font-size: 12px; font-weight: 800; }
+      .welcome-status-chip strong, .welcome-status-chip small { display: block; }
+      .welcome-status-chip strong { font-size: 10px; }
+      .welcome-status-chip small { margin-top: 3px; color: #728078; font-size: 9px; }
+
       .auth-screen {
         display: grid;
         min-height: 100%;
@@ -266,6 +298,17 @@
 
       @media (max-width: 700px) {
         html, body { background: var(--white); }
+        .welcome-screen { min-height: 100%; padding: 12px; }
+        .welcome-layout { min-height: 0; grid-template-columns: 1fr; border-radius: 25px; }
+        .welcome-copy { padding: 28px 23px 30px; }
+        .welcome-copy h1 { margin: 25px 0 12px; font-size: clamp(38px, 11vw, 52px); letter-spacing: -2.4px; }
+        .welcome-lede { font-size: 14px; }
+        .welcome-features { gap: 9px; margin: 21px 0 23px; }
+        .welcome-features li { font-size: 12px; }
+        .welcome-art { min-height: 245px; padding: 22px; }
+        .welcome-chat-card { width: min(85%, 310px); padding: 16px; }
+        .welcome-message { margin-top: 10px; padding: 9px 11px; }
+        .welcome-status-chip { right: 7%; bottom: 7%; }
         .auth-card { padding: 27px 23px; border-radius: 24px; }
         .workspace { display: block; width: 100%; }
         .sidebar { position: absolute; inset: 0; z-index: 2; border: 0; padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
@@ -339,6 +382,34 @@
         <span class="boot-spinner" aria-hidden="true"></span>
       </div>
     </div>
+    <section class="welcome-screen" id="welcomeScreen" aria-label="Welcome to Chatter" hidden>
+      <div class="welcome-layout">
+        <div class="welcome-copy">
+          <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
+          <h1>Good times are better <span>together.</span></h1>
+          <p class="welcome-lede">A simple place to catch up, share little moments, and stay close to the people who matter.</p>
+          <ul class="welcome-features">
+            <li><span class="welcome-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H6l-3 2 1-4.2A7.5 7.5 0 1 1 20 11.5Z" /><path d="M8 11h.01M12 11h.01M16 11h.01" /></svg></span>Message friends and make group plans</li>
+            <li><span class="welcome-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3H4.5A1.5 1.5 0 0 0 3 4.5C3 13.6 10.4 21 19.5 21a1.5 1.5 0 0 0 1.5-1.5V17l-5-2-2 2c-3-1.2-5.3-3.5-6.5-6.5l2-2L7 3Z" /></svg></span>Talk face-to-face or by voice</li>
+            <li><span class="welcome-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3 2" /></svg></span>Share status updates that last 24 hours</li>
+          </ul>
+          <div class="welcome-actions">
+            <button class="primary-button" type="button" data-welcome-action="register">Create your account <span aria-hidden="true">→</span></button>
+            <button class="welcome-login" type="button" data-welcome-action="login">I already have an account</button>
+          </div>
+          <p class="welcome-note">Your people are just one conversation away.</p>
+        </div>
+        <div class="welcome-art" aria-hidden="true">
+          <div class="welcome-chat-card">
+            <div class="welcome-chat-header"><span class="welcome-avatar">T</span><span><strong>The good ones</strong><small>your friends, all together</small></span></div>
+            <div class="welcome-message">Anyone free this weekend? 🌿</div>
+            <div class="welcome-message outgoing">Count me in! 😊</div>
+            <div class="welcome-message">Can't wait to catch up.</div>
+          </div>
+          <div class="welcome-status-chip"><span class="welcome-status-ring">24</span><span><strong>Little moments</strong><small>Here today, gone tomorrow</small></span></div>
+        </div>
+      </div>
+    </section>
     <section class="auth-screen" id="authScreen" aria-label="Chatter account">
       <div class="auth-card">
         <div class="brand-mark"><span class="brand-icon">c</span><span>chatter</span></div>
@@ -1417,6 +1488,7 @@
         function showAuth(errorMessage) {
           events?.close();
           finishBoot();
+          $("#welcomeScreen").hidden = true;
           $("#workspace").hidden = true;
           $("#mobileNav").hidden = true;
           $("#authScreen").hidden = false;
@@ -1424,7 +1496,43 @@
           if (errorMessage) $("#loginError").textContent = errorMessage;
         }
 
+        function hasSeenWelcome() {
+          try {
+            return window.localStorage.getItem("chatter-welcome-seen") === "1";
+          } catch (error) {
+            console.warn("Could not read the welcome-screen preference.", error);
+            return false;
+          }
+        }
+
+        function showWelcome() {
+          $("#authScreen").hidden = true;
+          $("#workspace").hidden = true;
+          $("#mobileNav").hidden = true;
+          $("#welcomeScreen").hidden = false;
+          finishBoot();
+        }
+
+        function continueFromWelcome(mode) {
+          try {
+            window.localStorage.setItem("chatter-welcome-seen", "1");
+          } catch (error) {
+            console.warn("Could not save the welcome-screen preference.", error);
+          }
+          $("#welcomeScreen").hidden = true;
+          $("#authScreen").hidden = false;
+          setAuthMode(mode);
+          if (mode === "register") $("#registerName").focus();
+          else $("#loginEmail").focus();
+        }
+
         document.addEventListener("click", async (event) => {
+          const welcomeButton = event.target.closest("[data-welcome-action]");
+          if (welcomeButton) {
+            continueFromWelcome(welcomeButton.dataset.welcomeAction);
+            return;
+          }
+
           const authButton = event.target.closest("[data-auth-mode]");
           if (authButton) return setAuthMode(authButton.dataset.authMode);
 
@@ -2071,10 +2179,8 @@
 
         api("/api/session").then((result) => {
           if (result.user) openWorkspace(result);
-          else {
-            setAuthMode("login");
-            finishBoot();
-          }
+          else if (hasSeenWelcome()) showAuth();
+          else showWelcome();
         }).catch((error) => {
           console.error("Could not restore the Chatter session.", error);
           showAuth(`Could not connect to Chatter: ${error.message}`);
