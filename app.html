@@ -561,6 +561,7 @@
         <div class="call-controls">
           <button class="call-control-button" type="button" id="toggleMicrophoneButton">Mute mic</button>
           <button class="call-control-button" type="button" id="toggleCameraButton" hidden>Turn camera off</button>
+          <button class="call-control-button" type="button" id="shareScreenButton" hidden>Share screen</button>
           <button class="call-control-button end" type="button" id="endCallButton">End call</button>
         </div>
       </section>
@@ -610,6 +611,10 @@
         let callDisconnectTimer = 0;
         let microphoneEnabled = true;
         let cameraEnabled = true;
+        let screenShareStream = null;
+        let screenShareActive = false;
+        let incomingCallTone = null;
+        let audioEngine = null;
 
         function finishBoot() {
           $("#bootScreen").classList.add("is-done");
@@ -729,9 +734,68 @@
           activeCall = null;
           incomingCall = null;
           releaseCallMedia();
+          if (screenShareStream) {
+            screenShareStream.getTracks().forEach((track) => track.stop());
+            screenShareStream = null;
+          }
+          screenShareActive = false;
+          $("#shareScreenButton").hidden = true;
+          $("#shareScreenButton").textContent = "Share screen";
           $("#callChoiceDialog").hidden = true;
           $("#incomingCallDialog").hidden = true;
           $("#callSessionDialog").hidden = true;
+          stopCallTone();
+        }
+
+        function isScreenShareSupported() {
+          const isAndroidWebView = /Android/i.test(navigator.userAgent) && !/Chrome\//i.test(navigator.userAgent) && !/CriOS\//i.test(navigator.userAgent);
+          return !!(navigator.mediaDevices?.getDisplayMedia && !isAndroidWebView && window.isSecureContext);
+        }
+
+        function ensureCallTone() {
+          if (incomingCallTone) return;
+          try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            audioEngine = new AudioContextClass();
+            const oscillator = audioEngine.createOscillator();
+            const gainNode = audioEngine.createGain();
+            oscillator.type = "sine";
+            oscillator.frequency.value = 880;
+            gainNode.gain.value = 0.03;
+            oscillator.connect(gainNode);
+            gainNode.connect(audioEngine.destination);
+            oscillator.start();
+            const stopAt = () => {
+              if (!incomingCallTone) return;
+              oscillator.stop();
+              oscillator.disconnect();
+              gainNode.disconnect();
+              incomingCallTone = null;
+            };
+            incomingCallTone = { stopAt, oscillator, gainNode };
+            setTimeout(() => {
+              if (!incomingCallTone) return;
+              oscillator.frequency.value = 660;
+              if (audioEngine?.state === "suspended") audioEngine.resume().catch(() => {});
+            }, 350);
+            setTimeout(() => {
+              if (!incomingCallTone) return;
+              stopAt();
+            }, 1700);
+          } catch (error) {
+            console.warn("Could not start the call tone:", error);
+          }
+        }
+
+        function stopCallTone() {
+          if (!incomingCallTone) return;
+          incomingCallTone.stopAt();
+          incomingCallTone = null;
+          if (audioEngine && audioEngine.state !== "closed") {
+            audioEngine.close().catch(() => {});
+          }
+          audioEngine = null;
         }
 
         async function endCall() {
@@ -836,6 +900,8 @@
           $("#toggleCameraButton").hidden = call.type !== "video";
           $("#toggleMicrophoneButton").textContent = "Mute mic";
           $("#toggleCameraButton").textContent = "Turn camera off";
+          $("#shareScreenButton").hidden = !(call.type === "video" && isScreenShareSupported());
+          $("#shareScreenButton").textContent = screenShareActive ? "Stop sharing" : "Share screen";
           $("#callDuration").textContent = "00:00";
           $("#callSessionDialog").hidden = false;
           if (call.type === "video") {
@@ -895,6 +961,59 @@
           }
         }
 
+        async function toggleScreenShare() {
+          if (!activeCall || activeCall.type !== "video" || !isScreenShareSupported()) {
+            toast("Screen sharing is not available in this browser or app environment.");
+            return;
+          }
+          if (screenShareActive) {
+            screenShareStream?.getTracks().forEach((track) => track.stop());
+            screenShareStream = null;
+            screenShareActive = false;
+            $("#shareScreenButton").textContent = "Share screen";
+            return;
+          }
+          try {
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+              video: {
+                frameRate: 30,
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              },
+              audio: false
+            });
+            screenShareStream = displayStream;
+            screenShareActive = true;
+            $("#shareScreenButton").textContent = "Stop sharing";
+            const screenTrack = displayStream.getVideoTracks()[0];
+            if (screenTrack) {
+              screenTrack.addEventListener("ended", () => {
+                if (!screenShareActive) return;
+                screenShareActive = false;
+                screenShareStream = null;
+                $("#shareScreenButton").textContent = "Share screen";
+                toast("Screen sharing stopped.");
+              });
+            }
+            const existing = activeCall.peerConnection;
+            if (existing && callMediaStream) {
+              const currentTracks = [...existing.getSenders()].map((sender) => sender.track).filter(Boolean);
+              if (!currentTracks.includes(screenTrack)) {
+                existing.getSenders().forEach((sender) => {
+                  if (sender.track && sender.track.kind === "video") {
+                    existing.removeTrack(sender);
+                  }
+                });
+                existing.addTrack(screenTrack, displayStream);
+              }
+            }
+            toast("Screen sharing is active.");
+          } catch (error) {
+            console.warn("Could not share the screen:", error);
+            toast(error.name === "NotAllowedError" ? "Choose a screen or window to share, then try again." : "Screen sharing could not start in this browser.");
+          }
+        }
+
         async function declineIncomingCall() {
           if (!incomingCall) return;
           const call = incomingCall;
@@ -920,6 +1039,7 @@
           const button = $("#acceptCallButton");
           button.disabled = true;
           $("#incomingCallError").textContent = "";
+          ensureCallTone();
           try {
             callMediaStream = await navigator.mediaDevices.getUserMedia({
               audio: true, video: invitation.callType === "video"
@@ -933,6 +1053,7 @@
             await createCallPeerConnection(activeCall);
             await api(`/api/calls/${encodeURIComponent(activeCall.id)}/accept`, { method: "POST" });
             incomingCall = null;
+            stopCallTone();
             showCallSession(activeCall, false);
           } catch (error) {
             console.error("Could not answer the incoming call:", error);
@@ -1001,6 +1122,7 @@
             $("#incomingCallError").textContent = "";
             $("#incomingCallDialog").hidden = false;
             if (document.visibilityState === "visible") navigator.vibrate?.([250, 150, 250]);
+            ensureCallTone();
             return;
           }
           if (event.action === "accepted" && activeCall?.id === event.callId && activeCall.role === "caller") {
@@ -1998,6 +2120,7 @@
           callMediaStream?.getVideoTracks().forEach((track) => { track.enabled = cameraEnabled; });
           $("#toggleCameraButton").textContent = cameraEnabled ? "Turn camera off" : "Turn camera on";
         });
+        $("#shareScreenButton").addEventListener("click", toggleScreenShare);
         $("#callChoiceDialog").addEventListener("click", (event) => {
           if (event.target === event.currentTarget) event.currentTarget.hidden = true;
         });

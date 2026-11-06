@@ -785,6 +785,7 @@ async function createPeerConnection(call) {
 }
 
 function showCallSession(call, outgoing) {
+  const canShareScreen = call.type === "video" && !!navigator.mediaDevices?.getDisplayMedia && !isAndroidWebView();
   document.querySelector("#callChoiceDialog").hidden = true;
   document.querySelector("#incomingCallDialog").hidden = true;
   document.querySelector("#callSessionTitle").textContent = `${call.type === "video" ? "Video" : "Audio"} call with ${call.peerName}`;
@@ -800,7 +801,7 @@ function showCallSession(call, outgoing) {
   document.querySelector("#callPreviewVideo").hidden = call.type !== "video";
   document.querySelector("#remoteCallVideo").hidden = true;
   document.querySelector("#toggleCameraButton").hidden = call.type !== "video";
-  document.querySelector("#shareScreenButton").hidden = call.type !== "video";
+  document.querySelector("#shareScreenButton").hidden = !canShareScreen;
   document.querySelector("#toggleMicrophoneButton").textContent = "Mute mic";
   document.querySelector("#toggleCameraButton").textContent = "Turn camera off";
   document.querySelector("#shareScreenButton").textContent = "Share screen";
