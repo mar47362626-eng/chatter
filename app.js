@@ -1048,9 +1048,18 @@ async function stopScreenShare() {
   document.querySelector("#callPreviewCaption").textContent = "Call connected.";
 }
 
+function isAndroidWebView() {
+  const userAgent = navigator.userAgent || "";
+  return /Android/i.test(userAgent) && /(wv|WebView)/i.test(userAgent);
+}
+
 async function toggleScreenShare() {
   if (screenShareStream) {
     await stopScreenShare();
+    return;
+  }
+  if (isAndroidWebView()) {
+    showToast("Screen sharing is not supported inside the Android WebView. Open Chatter in Chrome or Edge to share your screen.");
     return;
   }
   if (!navigator.mediaDevices?.getDisplayMedia) {
