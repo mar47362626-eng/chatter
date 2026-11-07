@@ -6,6 +6,7 @@ const { extname, join, normalize } = require("node:path");
 const { getCountries, getCountryCallingCode, isValidPhoneNumber, parsePhoneNumber } = require("libphonenumber-js");
 const phoneMetadata = require("libphonenumber-js/metadata.max.json");
 const webPush = require("web-push");
+const { APP_DATA_PLAN_OPTIONS, getPlanById, getPlanUsageSummary } = require("./data-billing");
 
 const scrypt = promisify(scryptCallback);
 const root = __dirname;
@@ -221,6 +222,110 @@ function publicUser(user) {
     avatarUrl: user.avatar_path ? `/api/avatars/${user.id}` : "",
     shareToken: user.share_token
   };
+}
+
+async function ensureDataPlans() {
+  for (const plan of APP_DATA_PLAN_OPTIONS) {
+    await database.prepare(`
+      INSERT INTO data_plans (id, name, amount, currency, data_limit_bytes, overage_price_per_gb, is_default, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET
+        name = excluded.name,
+        amount = excluded.amount,
+        currency = excluded.currency,
+        data_limit_bytes = excluded.data_limit_bytes,
+        overage_price_per_gb = excluded.overage_price_per_gb,
+        is_default = excluded.is_default,
+        created_at = excluded.created_at
+    `).run(plan.id, plan.name, plan.amount, plan.currency, plan.dataLimitBytes, plan.overagePricePerGb, plan.isDefault, new Date().toISOString());
+  }
+}
+
+async function ensureUserDataPlan(userId, planId = "free-500mb") {
+  const plan = getPlanById(planId);
+  const existing = await database.prepare(`
+    SELECT id, plan_id, status, period_starts_at, period_ends_at, monthly_limit_bytes
+    FROM user_data_subscriptions
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(userId);
+  if (existing && existing.status === "active") {
+    if (existing.plan_id !== plan.id || Number(existing.monthly_limit_bytes) !== Number(plan.dataLimitBytes)) {
+      await database.prepare(`
+        UPDATE user_data_subscriptions
+        SET plan_id = ?, monthly_limit_bytes = ?, updated_at = now()
+        WHERE id = ?
+      `).run(plan.id, plan.dataLimitBytes, existing.id);
+    }
+    return { ...existing, planId: existing.plan_id, planName: plan.name, limitBytes: Number(existing.monthly_limit_bytes || plan.dataLimitBytes) };
+  }
+  const now = new Date();
+  const startsAt = now.toISOString();
+  const endsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const id = randomBytes(16).toString("hex");
+  await database.prepare(`
+    INSERT INTO user_data_subscriptions (id, user_id, plan_id, status, monthly_limit_bytes, monthly_used_bytes, period_starts_at, period_ends_at, created_at, updated_at)
+    VALUES (?, ?, ?, 'active', ?, 0, ?, ?, ?, ?)
+  `).run(id, userId, plan.id, plan.dataLimitBytes, startsAt, endsAt, startsAt, startsAt);
+  return { id, planId: plan.id, planName: plan.name, limitBytes: plan.dataLimitBytes, period_starts_at: startsAt, period_ends_at: endsAt };
+}
+
+async function getUserDataStatus(userId) {
+  const subscription = await database.prepare(`
+    SELECT uds.id, uds.user_id, uds.plan_id, uds.status, uds.monthly_limit_bytes, uds.monthly_used_bytes,
+      uds.period_starts_at AS "periodStartsAt", uds.period_ends_at AS "periodEndsAt",
+      dp.name AS "planName", dp.amount, dp.currency, dp.overage_price_per_gb AS "overagePricePerGb"
+    FROM user_data_subscriptions uds
+    JOIN data_plans dp ON dp.id = uds.plan_id
+    WHERE uds.user_id = ? AND uds.status = 'active' AND uds.period_ends_at > now()
+    ORDER BY uds.created_at DESC LIMIT 1
+  `).get(userId);
+
+  const activePlan = subscription ? getPlanById(subscription.plan_id) : getPlanById("free-500mb");
+  const usedBytes = Number(subscription?.monthly_used_bytes || 0);
+  const summary = getPlanUsageSummary({ planId: activePlan.id, usedBytes });
+
+  return {
+    planId: summary.planId,
+    planName: subscription?.planName || summary.planName,
+    amount: subscription?.amount ?? summary.amount,
+    currency: subscription?.currency ?? summary.currency,
+    limitBytes: summary.limitBytes,
+    usedBytes: summary.usedBytes,
+    remainingBytes: summary.remainingBytes,
+    overageBytes: summary.overageBytes,
+    extraCharge: summary.extraCharge,
+    status: summary.status,
+    periodStartsAt: subscription?.periodStartsAt || null,
+    periodEndsAt: subscription?.periodEndsAt || null,
+    overagePricePerGb: subscription?.overagePricePerGb ?? activePlan.overagePricePerGb
+  };
+}
+
+async function recordAppDataUsage(userId, bytesUsed, category = "message") {
+  if (!userId || !Number.isFinite(Number(bytesUsed)) || Number(bytesUsed) <= 0) return null;
+  const normalizedCategory = ["message", "image", "video", "file", "call"].includes(category) ? category : "message";
+  const safeBytes = Math.max(1, Math.round(Number(bytesUsed)));
+  await ensureUserDataPlan(userId);
+  await database.prepare(`
+    INSERT INTO data_usage (id, user_id, bytes_used, category, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(randomBytes(16).toString("hex"), userId, safeBytes, normalizedCategory, new Date().toISOString());
+  const subscription = await database.prepare(`
+    SELECT id, monthly_used_bytes
+    FROM user_data_subscriptions
+    WHERE user_id = ? AND status = 'active' AND period_ends_at > now()
+    ORDER BY created_at DESC LIMIT 1
+  `).get(userId);
+  if (subscription) {
+    await database.prepare(`
+      UPDATE user_data_subscriptions
+      SET monthly_used_bytes = ?, updated_at = now()
+      WHERE id = ?
+    `).run(Number(subscription.monthly_used_bytes || 0) + safeBytes, subscription.id);
+  }
+  return getUserDataStatus(userId);
 }
 
 async function getPublicUser(userId) {
@@ -1128,6 +1233,34 @@ async function handleApi(request, response, url) {
   }
 
   if (route === "GET /api/countries") return respond(response, 200, { countries: countryCallingCodes() });
+
+  if (route === "GET /api/data/plans") return respond(response, 200, { plans: APP_DATA_PLAN_OPTIONS });
+
+  if (route === "GET /api/data/status") {
+    const session = await requireSession(request, response);
+    return respond(response, 200, { status: await getUserDataStatus(session.userId) });
+  }
+
+  if (route === "POST /api/data/plan") {
+    const session = await requireSession(request, response);
+    const input = await readJson(request);
+    const planId = typeof input.planId === "string" ? input.planId : "free-500mb";
+    const plan = getPlanById(planId);
+    await ensureUserDataPlan(session.userId, plan.id);
+    return respond(response, 200, {
+      plan: { id: plan.id, name: plan.name, amount: plan.amount, currency: plan.currency, limitBytes: plan.dataLimitBytes },
+      status: await getUserDataStatus(session.userId)
+    });
+  }
+
+  if (route === "POST /api/data/usage") {
+    const session = await requireSession(request, response);
+    const input = await readJson(request);
+    const bytesUsed = typeof input.bytesUsed === "number" ? input.bytesUsed : Number(input.bytesUsed || 0);
+    const category = typeof input.category === "string" ? input.category : "message";
+    if (!Number.isFinite(bytesUsed) || bytesUsed <= 0) throw new HttpError(400, "Usage must be a positive number of bytes.");
+    return respond(response, 200, { status: await recordAppDataUsage(session.userId, bytesUsed, category) });
+  }
 
   if (route === "POST /api/register/send-code") {
     if (!process.env.BREVO_API_KEY || !process.env.BREVO_SENDER_EMAIL) throw new HttpError(503, "Email is not configured. Set BREVO_API_KEY and BREVO_SENDER_EMAIL on the server.");
@@ -2393,7 +2526,8 @@ async function handleApi(request, response, url) {
       const attachmentPath = attachment ? `chats/${chatId}/${messageId}.${attachment.extension}` : null;
       if (attachment) await uploadMediaObject(attachmentPath, attachment.bytes, attachment.mimeType);
       try {
-        await database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, attachment_path, attachment_mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+        await database.prepare("INSERT INTO messages (id, chat_id, sender_id, text, attachment_name, attachment_size, attachment_path, attachment_mime, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\
+").run(
           messageId,
           chatId,
           session.userId,
@@ -2408,6 +2542,8 @@ async function handleApi(request, response, url) {
         if (attachmentPath) await removeMediaObject(attachmentPath);
         throw error;
       }
+      const usageBytes = Buffer.byteLength(text, "utf8") + (attachment ? attachment.bytes.length : 0);
+      await recordAppDataUsage(session.userId, usageBytes, attachment ? "image" : "message");
       await recordUserActivity(session.userId, "message.sent", { conversationType: chat.type, hasAttachment: Boolean(attachment) });
       await sendChatUpdate(chatId);
       sendMessagePushNotifications(chatId, session.userId).catch((error) => {
@@ -2502,6 +2638,7 @@ const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "127.0.0.1";
 async function startServer() {
   await database.prepare("SELECT id FROM users LIMIT 0").all();
+  await ensureDataPlans();
   await database.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
   await database.prepare("DELETE FROM pending_registrations WHERE expires_at < ?").run(Date.now());
   await new Promise((resolve, reject) => {

@@ -82,6 +82,38 @@ create table if not exists public.push_subscriptions (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.data_plans (
+  id text primary key,
+  name text not null,
+  amount integer not null default 0 check (amount >= 0),
+  currency text not null default 'NGN' check (currency = 'NGN'),
+  data_limit_bytes bigint not null check (data_limit_bytes >= 0),
+  overage_price_per_gb integer not null default 200 check (overage_price_per_gb >= 0),
+  is_default boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.user_data_subscriptions (
+  id text primary key,
+  user_id text not null references public.users(id) on delete cascade,
+  plan_id text not null references public.data_plans(id) on delete restrict,
+  status text not null default 'active' check (status in ('active', 'expired', 'cancelled')),
+  monthly_limit_bytes bigint not null check (monthly_limit_bytes >= 0),
+  monthly_used_bytes bigint not null default 0 check (monthly_used_bytes >= 0),
+  period_starts_at timestamptz not null default now(),
+  period_ends_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.data_usage (
+  id text primary key,
+  user_id text not null references public.users(id) on delete cascade,
+  bytes_used bigint not null check (bytes_used > 0),
+  category text not null check (category in ('message', 'image', 'video', 'file', 'call')),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.call_history (
   id text primary key,
   chat_id text not null references public.chats(id) on delete cascade,
@@ -206,6 +238,9 @@ create index if not exists messages_chat_created on public.messages (chat_id, cr
 create index if not exists statuses_expires_at on public.statuses (expires_at);
 create index if not exists statuses_user_created on public.statuses (user_id, created_at desc);
 create index if not exists push_subscriptions_user on public.push_subscriptions (user_id);
+create index if not exists data_plans_default on public.data_plans (is_default);
+create index if not exists user_data_subscriptions_user_status on public.user_data_subscriptions (user_id, status, period_ends_at);
+create index if not exists data_usage_user_created on public.data_usage (user_id, created_at);
 create index if not exists call_history_chat_created on public.call_history (chat_id, created_at);
 create index if not exists user_activity_created on public.user_activity (created_at);
 create index if not exists user_activity_user_created on public.user_activity (user_id, created_at);
@@ -220,6 +255,9 @@ alter table public.chat_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.statuses enable row level security;
 alter table public.push_subscriptions enable row level security;
+alter table public.data_plans enable row level security;
+alter table public.user_data_subscriptions enable row level security;
+alter table public.data_usage enable row level security;
 alter table public.call_history enable row level security;
 alter table public.contacts enable row level security;
 alter table public.message_reports enable row level security;
