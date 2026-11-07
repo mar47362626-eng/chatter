@@ -155,6 +155,58 @@ class HttpError extends Error {
   }
 }
 
+const requestRateLimit = new Map();
+const requestRateLimitWindowMs = 60 * 1000;
+const requestRateLimitMaxRequests = 120;
+
+function applySecurityHeaders(response, request) {
+  const origin = request.headers.origin;
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
+  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  response.setHeader("X-XSS-Protection", "0");
+  if (process.env.NODE_ENV === "production" || request.headers["x-forwarded-proto"] === "https" || request.socket?.encrypted) {
+    response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co https://api.paystack.co wss: ws:; media-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';");
+  if (origin) {
+    response.setHeader("Access-Control-Allow-Origin", origin);
+    response.setHeader("Vary", "Origin");
+  }
+  response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Paystack-Signature");
+  response.setHeader("Access-Control-Allow-Credentials", "true");
+}
+
+function getClientIp(request) {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string") return forwardedFor.split(",")[0].trim();
+  const realIp = request.headers["x-real-ip"];
+  if (typeof realIp === "string") return realIp.trim();
+  return request.socket?.remoteAddress || "unknown";
+}
+
+function enforceRateLimit(request, response) {
+  const ip = getClientIp(request);
+  const now = Date.now();
+  const windowEntries = requestRateLimit.get(ip) || [];
+  const recentEntries = windowEntries.filter((stamp) => now - stamp < requestRateLimitWindowMs);
+  if (recentEntries.length >= requestRateLimitMaxRequests) {
+    response.writeHead(429, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Retry-After": String(Math.ceil((recentEntries[0] + requestRateLimitWindowMs - now) / 1000) || 60)
+    });
+    response.end(JSON.stringify({ error: "Too many requests. Please wait a moment and try again." }));
+    return false;
+  }
+  recentEntries.push(now);
+  requestRateLimit.set(ip, recentEntries);
+  return true;
+}
+
 function respond(response, status, value, headers = {}) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...headers });
   response.end(JSON.stringify(value));
@@ -2609,6 +2661,15 @@ function serveStatic(request, response, url) {
 
 const server = createServer(async (request, response) => {
   try {
+    applySecurityHeaders(response, request);
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, { "Content-Length": "0" });
+      response.end();
+      return;
+    }
+    if (!enforceRateLimit(request, response)) {
+      return;
+    }
     const url = new URL(request.url, "http://localhost");
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
