@@ -1389,11 +1389,18 @@ document.querySelector("#settingsButton").addEventListener("click", () => {
   document.querySelector("#settingsError").textContent = "";
   document.querySelector("#settingsDialog").hidden = false;
   document.querySelector("#settingsName").focus();
-  loadForeignNumberStore().catch((error) => {
-    const status = document.querySelector("#numberSubscriptionStatus");
-    status.textContent = error.message;
-    status.hidden = false;
-  });
+  Promise.all([
+    loadForeignNumberStore().catch((error) => {
+      const status = document.querySelector("#numberSubscriptionStatus");
+      status.textContent = error.message;
+      status.hidden = false;
+    }),
+    loadAppDataPlans().catch((error) => {
+      const status = document.querySelector("#dataPlanStatus");
+      status.textContent = error.message;
+      status.hidden = false;
+    })
+  ]);
 });
 
 document.querySelector("#chooseProfilePhotoButton").addEventListener("click", () => {
@@ -1451,6 +1458,105 @@ document.querySelector("#copyChatLinkButton").addEventListener("click", async ()
     linkInput.focus();
     linkInput.select();
     showToast("Clipboard access is unavailable. The link is selected so you can copy it.");
+  }
+});
+
+function formatAppDataSize(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(value >= 10 * 1024 ? 0 : 1)} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+async function loadAppDataPlans() {
+  const details = document.querySelector("#appDataPlanDetails");
+  const list = document.querySelector("#appDataPlanList");
+  const status = document.querySelector("#dataPlanStatus");
+  const panel = document.querySelector("#dataPlanPanel");
+  const formatter = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
+  status.hidden = true;
+  status.textContent = "";
+  panel.setAttribute("aria-busy", "true");
+  list.innerHTML = `
+    <div class="number-store-loading" aria-hidden="true">
+      <span></span><span></span>
+    </div>
+  `;
+  let plansResult;
+  let statusResult;
+  try {
+    [plansResult, statusResult] = await Promise.all([
+      apiRequest("/api/data/plans"),
+      apiRequest("/api/data/status").catch(() => null)
+    ]);
+  } catch (error) {
+    panel.setAttribute("aria-busy", "false");
+    list.innerHTML = `<div class="number-store-empty"><span aria-hidden="true">!</span><strong>Could not load app data plans</strong><small>Check your connection and try again.</small></div>`;
+    throw error;
+  }
+  const plans = plansResult.plans || [];
+  const currentStatus = statusResult?.status || null;
+  const currentPlan = plans.find((plan) => plan.id === currentStatus?.planId) || plans[0];
+  const activePlanView = currentStatus ? `
+    <div class="number-subscription-card ${currentStatus.status === "over_limit" ? "is-attention" : "is-active"}">
+      <div class="number-subscription-topline">
+        <span class="number-subscription-label">CURRENT APP PLAN</span>
+        <span class="number-status-pill">${currentStatus.status === "over_limit" ? "Over limit" : "Active"}</span>
+      </div>
+      <strong>${escapeHtml(currentStatus.planName || currentPlan?.name || "Free plan")}</strong>
+      <span>${formatAppDataSize(currentStatus.usedBytes)} used of ${formatAppDataSize(currentStatus.limitBytes)} · ${currentStatus.remainingBytes > 0 ? `${formatAppDataSize(currentStatus.remainingBytes)} remaining` : "No data left"}</span>
+      ${currentStatus.overageBytes > 0 ? `<span class="number-cancel-note">${formatAppDataSize(currentStatus.overageBytes)} over the plan limit · extra charge ${formatter.format(currentStatus.extraCharge)}</span>` : ""}
+    </div>
+  ` : `<p class="dialog-description">No app data bundle is active yet.</p>`;
+  details.innerHTML = activePlanView;
+  if (!plans.length) {
+    list.innerHTML = `<div class="number-store-empty"><span aria-hidden="true">◎</span><strong>No plans available right now</strong><small>Check back later.</small></div>`;
+    panel.setAttribute("aria-busy", "false");
+    return;
+  }
+  list.innerHTML = `
+    <div class="number-store-list-heading">
+      <span>AVAILABLE BUNDLES</span>
+      <span>${plans.length} plans</span>
+    </div>
+    <div class="number-store-options">
+      ${plans.map((plan) => {
+        const isCurrent = currentStatus && currentStatus.planId === plan.id;
+        const buttonLabel = isCurrent ? "Current" : plan.amount > 0 ? "Activate" : "Use free plan";
+        return `
+          <article class="foreign-number-option">
+            <span class="foreign-number-mark" aria-hidden="true">◔</span>
+            <span class="foreign-number-copy"><strong>${escapeHtml(plan.name)}</strong><small>${escapeHtml(plan.description || "In-app data bundle")}</small></span>
+            <span class="foreign-number-price">${plan.amount > 0 ? escapeHtml(formatter.format(plan.amount)) : "Free"}<small>/ month</small></span>
+            <button class="foreign-number-buy" type="button" data-buy-plan="${escapeHtml(plan.id)}" ${isCurrent ? "disabled" : ""}>${buttonLabel}<span aria-hidden="true">→</span></button>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+  panel.setAttribute("aria-busy", "false");
+}
+
+document.querySelector("#appDataPlanList").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-buy-plan]");
+  if (!button) return;
+  const planId = button.dataset.buyPlan;
+  const planName = button.closest(".foreign-number-option")?.querySelector("strong")?.textContent || "selected plan";
+  if (!window.confirm(`Activate ${planName}? This changes your Chatter app data bundle for the month.`)) return;
+  button.disabled = true;
+  button.textContent = "Updating…";
+  try {
+    const result = await apiRequest("/api/data/plan", {
+      method: "POST",
+      body: JSON.stringify({ planId })
+    });
+    await loadAppDataPlans();
+    showToast(`${result.plan.name} is active for your app usage.`);
+  } catch (error) {
+    showToast(error.message);
+    await loadAppDataPlans();
   }
 });
 

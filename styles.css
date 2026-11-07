@@ -772,7 +772,7 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 .profile-photo-button:hover { border-color: #9dcbb1; background: #f3faf5; }
 .profile-photo-button:active { transform: translateY(1px); }
 .share-link-panel { margin-top: 20px; padding-top: 17px; border-top: 1px solid #edf1ed; }
-#numberSubscriptionPanel { margin-top: 22px; padding-top: 19px; }
+#numberSubscriptionPanel, #dataPlanPanel { margin-top: 22px; padding-top: 19px; }
 .number-store-heading { display: flex; align-items: center; gap: 10px; }
 .number-store-icon { display: grid; width: 31px; height: 31px; flex: 0 0 31px; place-items: center; border: 1px solid #d5eee0; border-radius: 10px; background: #f0faf4; color: #16835d; font-size: 15px; }
 .number-store-heading > span:last-child { display: grid; gap: 3px; }
@@ -819,10 +819,10 @@ body.landing-mode { height: auto; min-height: 100vh; overflow: auto; background:
 .number-store-loading { display: grid; gap: 7px; }
 .number-store-loading span { height: 48px; border: 1px solid #edf1ed; border-radius: 11px; background: linear-gradient(90deg, #f5f8f6 25%, #fff 50%, #f5f8f6 75%); background-size: 200% 100%; animation: number-store-shimmer 1.3s linear infinite; }
 @keyframes number-store-shimmer { to { background-position: -200% 0; } }
-#numberSubscriptionStatus:not(:empty) { display: flex; align-items: center; gap: 9px; margin-top: 11px; padding: 10px 11px; border: 1px solid #f4e3d6; border-radius: 10px; background: #fff8f2; color: #a5482b; font-size: 9px; line-height: 1.5; }
+#numberSubscriptionStatus:not(:empty), #dataPlanStatus:not(:empty) { display: flex; align-items: center; gap: 9px; margin-top: 11px; padding: 10px 11px; border: 1px solid #f4e3d6; border-radius: 10px; background: #fff8f2; color: #a5482b; font-size: 9px; line-height: 1.5; }
 .number-status-icon { display: grid; width: 19px; height: 19px; flex: 0 0 19px; place-items: center; border-radius: 50%; background: #ffeadb; color: #a5482b; font-size: 11px; font-weight: 800; }
-#numberSubscriptionStatus strong, #numberSubscriptionStatus small { display: block; }
-#numberSubscriptionStatus small { margin-top: 2px; color: #987665; font-size: 8px; }
+#numberSubscriptionStatus strong, #numberSubscriptionStatus small, #dataPlanStatus strong, #dataPlanStatus small { display: block; }
+#numberSubscriptionStatus small, #dataPlanStatus small { margin-top: 2px; color: #987665; font-size: 8px; }
 
 @media (max-width: 760px) {
   .attachment-preview { left: 12px; }
